@@ -1,0 +1,59 @@
+name: Nightly verification
+
+on:
+  schedule:
+    # 03:17 JST (18:17 UTC); avoid the top of the hour to reduce queue delays.
+    - cron: "17 18 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gasolineengine-nightly-verification
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    name: Windows build, smoke test, and unit tests
+    runs-on: windows-latest
+    steps:
+      - name: Check out development branch
+        uses: actions/checkout@v4
+        with:
+          ref: ios/initial-support
+          sparse-checkout: |
+            CMakeLists.txt
+            assets
+            include
+            shaders
+            src
+            tests
+          sparse-checkout-cone-mode: true
+
+      - name: Set up CMake
+        uses: lukka/get-cmake@latest
+
+      - name: Configure
+        run: cmake -S . -B build -A x64 -DORIGINALENGINE_BUILD_APP=ON
+
+      - name: Build
+        id: build
+        run: cmake --build build --config Release --parallel
+
+      - name: Smoke test
+        run: .\\build\\Release\\originalengine_app.exe --smoke-test
+
+      - name: Run unit tests
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Write audit summary
+        if: always()
+        shell: pwsh
+        run: |
+          "## GasolineEngine nightly verification" >> $env:GITHUB_STEP_SUMMARY
+          "" >> $env:GITHUB_STEP_SUMMARY
+          "- Target branch: `ios/initial-support`" >> $env:GITHUB_STEP_SUMMARY
+          "- Source commit: `$(git rev-parse HEAD)`" >> $env:GITHUB_STEP_SUMMARY
+          "- Build step: ${{ steps.build.outcome }}" >> $env:GITHUB_STEP_SUMMARY
+          "- See the job log for configure, smoke-test, and CTest results." >> $env:GITHUB_STEP_SUMMARY
