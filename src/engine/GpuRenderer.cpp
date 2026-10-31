@@ -567,7 +567,25 @@ bool GpuRenderer::initialize(SDL_Window* window, const Mesh& mesh, const RgbaIma
     textureInfo.width = texture.width;
     textureInfo.height = texture.height;
     textureInfo.layer_count_or_depth = 1;
-    textureInfo.num_levels = 1;
+
+    // Mipmaps reduce aliasing and shimmering when the texture is viewed at a distance.
+    Uint32 mipLevels = 1;
+    for (Uint32 dimension = std::max(texture.width, texture.height);
+         dimension > 1; dimension /= 2) {
+        ++mipLevels;
+    }
+    const SDL_GPUTextureUsageFlags mipmapUsage =
+        SDL_GPU_TEXTUREUSAGE_SAMPLER | SDL_GPU_TEXTUREUSAGE_COLOR_TARGET;
+    const bool supportsMipmaps = SDL_GPUTextureSupportsFormat(
+        device_, textureInfo.format, textureInfo.type, mipmapUsage);
+    if (supportsMipmaps) {
+        textureInfo.usage = mipmapUsage;
+        textureInfo.num_levels = mipLevels;
+    } else {
+        textureInfo.num_levels = 1;
+        std::fprintf(stderr,
+            "[OriginalEngine] GPU format does not support render-target mipmaps; using base level only.\\n");
+    }
     textureInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
     colorTexture_ = SDL_CreateGPUTexture(device_, &textureInfo);
     if (colorTexture_ == nullptr) {
@@ -622,6 +640,9 @@ bool GpuRenderer::initialize(SDL_Window* window, const Mesh& mesh, const RgbaIma
     textureDestination.d = 1;
     SDL_UploadToGPUTexture(textureCopyPass, &textureSource, &textureDestination, false);
     SDL_EndGPUCopyPass(textureCopyPass);
+    if (supportsMipmaps) {
+        SDL_GenerateMipmapsForGPUTexture(textureCommandBuffer, colorTexture_);
+    }
     if (!SDL_SubmitGPUCommandBuffer(textureCommandBuffer)) {
         setError("SDL_SubmitGPUCommandBuffer(texture upload)");
         SDL_ReleaseGPUTransferBuffer(device_, textureTransfer);
@@ -633,11 +654,11 @@ bool GpuRenderer::initialize(SDL_Window* window, const Mesh& mesh, const RgbaIma
     SDL_GPUSamplerCreateInfo samplerInfo{};
     samplerInfo.min_filter = SDL_GPU_FILTER_LINEAR;
     samplerInfo.mag_filter = SDL_GPU_FILTER_LINEAR;
-    samplerInfo.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
+    samplerInfo.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_LINEAR;
     samplerInfo.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_REPEAT;
     samplerInfo.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_REPEAT;
     samplerInfo.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_REPEAT;
-    samplerInfo.max_lod = 0.0F;
+    samplerInfo.max_lod = static_cast<float>(textureInfo.num_levels - 1U);
     colorSampler_ = SDL_CreateGPUSampler(device_, &samplerInfo);
     if (colorSampler_ == nullptr) {
         setError("SDL_CreateGPUSampler");

@@ -52,6 +52,7 @@ inline constexpr std::string_view glyph(char character) {
     case 'C': return "011/100/100/100/011";
     case 'U': return "101/101/101/101/111";
     case 'F': return "111/100/110/100/100";
+    case 'G': return "011/100/101/101/011";
     case 'P': return "110/101/110/100/100";
     case 'S': return "111/100/111/001/111";
     case ':': return "000/010/000/010/000";

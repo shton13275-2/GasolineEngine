@@ -468,3 +468,12 @@ CI:
 - Per-object constants now include model, MVP, inverse-transpose normal matrix, and camera position. The normal matrix handles non-uniform scale and falls back to identity for singular transforms to avoid NaNs.
 - The sample PPM loader supports P3 ASCII only. PNG/JPEG/BMP loading and MTL material parsing are not included in this step.
 - Added PPM loader unit tests. CI and physical iPhone Metal runtime still need to validate this change; a successful compile does not prove texture sampling on device.
+
+
+## Texture filtering and overlay glyph fix — 2026-11-01
+
+- The GPU demo texture asset was only 8x8 pixels. Replaced it with a 128x128 P3 checker texture, preserving the two-color checker design while adding per-tile bevel shading and subtle surface variation.
+- GPU texture creation now requests a complete mip chain when the device supports RGBA8 sampler + color-target usage. Mipmaps are generated after the base-level upload and sampled with linear mipmap filtering. Devices without that format capability safely retain the single-level texture path.
+- Increased the sampler max LOD to the final allocated mip level instead of forcing level 0.
+- Added the missing uppercase G glyph to the shared 3x5 bitmap font. This fixes the CPU-renderer button label GPU being rendered without its first character; both CPU and GPU overlay paths use the same glyph table.
+- CI must verify the code and asset packaging. Actual visual sharpness and button appearance still require iPhone runtime confirmation.
