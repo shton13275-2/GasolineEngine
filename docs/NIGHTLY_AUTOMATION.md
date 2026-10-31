@@ -36,6 +36,6 @@ This repository uses a deterministic, no-LLM nightly verification workflow. It d
 
 ## References
 
-- Workflow: [nightly-verification.yml](../.github/workflows/nightly-verification.yml)
+- Workflow on `main`: https://github.com/shton13275-2/GasolineEngine/blob/main/.github/workflows/nightly-verification.yml
 - GitHub Actions runner pricing: https://docs.github.com/en/actions/how-tos/write-workflows/choose-where-workflows-run/choose-the-runner-for-a-job
 - Scheduled workflow behavior: https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule
