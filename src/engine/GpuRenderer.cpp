@@ -584,7 +584,7 @@ bool GpuRenderer::initialize(SDL_Window* window, const Mesh& mesh, const RgbaIma
     } else {
         textureInfo.num_levels = 1;
         std::fprintf(stderr,
-            "[OriginalEngine] GPU format does not support render-target mipmaps; using base level only.\\n");
+            "[OriginalEngine] GPU format does not support render-target mipmaps; using base level only.\n");
     }
     textureInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
     colorTexture_ = SDL_CreateGPUTexture(device_, &textureInfo);
