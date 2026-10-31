@@ -477,3 +477,13 @@ CI:
 - Increased the sampler max LOD to the final allocated mip level instead of forcing level 0.
 - Added the missing uppercase G glyph to the shared 3x5 bitmap font. This fixes the CPU-renderer button label GPU being rendered without its first character; both CPU and GPU overlay paths use the same glyph table.
 - CI must verify the code and asset packaging. Actual visual sharpness and button appearance still require iPhone runtime confirmation.
+
+## Nightly verification automation — 2026-11-01
+
+- Added `.github/workflows/nightly-verification.yml` on the default `main` branch because GitHub scheduled workflows are only triggered from the default branch.
+- The scheduled workflow checks out `ios/initial-support`, then runs the Windows CMake configure/build, application smoke test, and CTest.
+- Schedule is 18:17 UTC (03:17 JST). GitHub may delay scheduled runs during high load; this is not an exact start-time guarantee.
+- The run summary is written to the GitHub Actions run summary. See `docs/NIGHTLY_AUTOMATION.md` for operating details.
+- The repository is public and the workflow uses a standard GitHub-hosted runner. GitHub documents standard hosted runners as free for public repositories.
+- This automation is deterministic CI, **not an AI coding agent**. It does not call an LLM/API, invent fixes, change source files, or semantically update documentation. Fixes and documentation changes remain part of the normal development process.
+- The workflow has not yet been manually dispatched or verified by a completed run at the time of this entry. Do not report the schedule as tested until a run completes.
