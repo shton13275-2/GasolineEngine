@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <iosfwd>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -15,6 +16,17 @@ struct RgbaImage {
 
     [[nodiscard]] bool empty() const noexcept {
         return width == 0 || height == 0 || pixels.empty();
+    }
+
+    [[nodiscard]] bool hasValidRgba8Data() const noexcept {
+        if (width == 0 || height == 0) return false;
+        const std::uint64_t pixelCount =
+            static_cast<std::uint64_t>(width) * static_cast<std::uint64_t>(height);
+        if (pixelCount > std::numeric_limits<std::uint32_t>::max() / 4U) {
+            return false;
+        }
+        const std::uint64_t expectedBytes = pixelCount * 4U;
+        return static_cast<std::uint64_t>(pixels.size()) == expectedBytes;
     }
 };
 
