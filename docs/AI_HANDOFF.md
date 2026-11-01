@@ -535,3 +535,13 @@ CI:
 - Added regression checks for valid decoded RGBA8 data, a mismatched pixel byte count, and dimensions that exceed the supported upload size.
 - GPU frame-render failure now destroys `GpuRenderer` (releasing its window claim) and attempts to recreate `SDL_Renderer`. If CPU renderer recreation also fails, the app exits with an error. This is recovery behavior in source code; runtime failure injection and device-loss recovery have not yet been tested.
 - These source changes were made on `ios/initial-support`. Verify the matching GitHub Actions run before treating them as build-tested. Physical iPhone Metal shader compilation and visual rendering remain unverified.
+
+
+## GPU renderer follow-up verification — 2026-11-01
+
+- Extracted the all-three-corners-have-UV decision into `include/engine/GpuGeometryRules.hpp`; `buildGpuGeometry` uses this shared rule so the production path and unit test exercise the same predicate.
+- Added the `gpu_geometry_rules` CTest target covering all eight combinations of UV presence across a triangle. This is a focused policy test; it does not instantiate SDL_GPU buffers or execute the Metal shader.
+- The latest verified source baseline before this follow-up was `9431a9354adfb634abcd30c996250aab908517e2`. GitHub Actions run [41300623759](https://github.com/shton13275-2/GasolineEngine/actions/runs/41300623759) completed successfully: Windows configure/build, one-frame CPU smoke test, all 6 existing CTest tests, and iOS arm64 unsigned IPA build/package/verification. The run's head SHA matched the baseline.
+- The documentation-only merge into `main` also passed its Windows workflow [41301235618](https://github.com/shton13275-2/GasolineEngine/actions/runs/41301235618). That run does not verify the GPU source branch.
+- GPU frame-failure fallback remains source-reviewed but has no failure-injection test. SDL_GPU mesh rendering, embedded MSL compilation, Metal texture sampling, and visual output remain unverified on a physical iPhone/iPad.
+- After this follow-up commit, re-check the new commit's own Windows and iOS workflow results before describing the new test as CI-passing.

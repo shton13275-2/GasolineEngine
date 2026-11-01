@@ -1,4 +1,5 @@
 #include "engine/GpuRenderer.hpp"
+#include "engine/GpuGeometryRules.hpp"
 #include "engine/TouchOverlay.hpp"
 
 #include <algorithm>
@@ -388,8 +389,8 @@ bool buildGpuGeometry(const Mesh& mesh, std::vector<GpuVertex>& vertices,
         // A varying is interpolated across a primitive. Keep UV presence constant
         // for all three duplicated vertices so mixed OBJ corners cannot create
         // partially textured fragments within one triangle.
-        const bool triangleHasTexCoords =
-            a.hasTexCoord && b.hasTexCoord && c.hasTexCoord;
+        const bool triangleHasTexCoords = gpu_detail::triangleHasCompleteTexCoords(
+            a.hasTexCoord, b.hasTexCoord, c.hasTexCoord);
         const MeshVertex* corners[3]{&a, &b, &c};
         for (const MeshVertex* corner : corners) {
             GpuVertex vertex{};

@@ -136,4 +136,8 @@ if(BUILD_TESTING)
     add_executable(originalengine_renderer3d_tests tests/renderer3d_tests.cpp)
     target_link_libraries(originalengine_renderer3d_tests PRIVATE originalengine)
     add_test(NAME renderer_software_size COMMAND originalengine_renderer3d_tests)
+
+    add_executable(originalengine_gpu_geometry_tests tests/gpu_geometry_rules_tests.cpp)
+    target_link_libraries(originalengine_gpu_geometry_tests PRIVATE originalengine)
+    add_test(NAME gpu_geometry_rules COMMAND originalengine_gpu_geometry_tests)
 endif()
