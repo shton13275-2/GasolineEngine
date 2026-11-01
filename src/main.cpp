@@ -505,13 +505,15 @@ int main(int argc, char* argv[]) {
             }
 
             if (gpuMode) {
-                const std::string gpuFailure = gpuRenderer != nullptr
-                    ? gpuRenderer->lastError() : "renderer unavailable";
+                std::string gpuFailure = "renderer unavailable";
                 const auto recovery = originalengine::runGpuFrameWithCpuFallback(
                     [&]() {
-                        return gpuRenderer != nullptr && gpuRenderer->renderFrame(
+                        if (gpuRenderer == nullptr) return false;
+                        const bool rendered = gpuRenderer->renderFrame(
                             camera, gpuSceneObjects, !smokeTest, hasMovementFinger,
                             movementX, movementY, smoothedFps);
+                        if (!rendered) gpuFailure = gpuRenderer->lastError();
+                        return rendered;
                     },
                     [&]() {
                         // Destroying GpuRenderer releases its window claim before
