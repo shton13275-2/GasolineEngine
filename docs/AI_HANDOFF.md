@@ -526,3 +526,12 @@ CI:
 - Fixed a confirmed interface mismatch in the embedded Metal shaders: the vertex stage wrote the `hasTexCoord` varying, and the fragment stage read `input.hasTexCoord`, but the fragment input structure did not declare that member.
 - Added `float hasTexCoord;` to the fragment-stage input structure so the varying is declared at both shader stages.
 - Updated the root README to record the fix. Physical-device Metal shader compilation and rendering still require verification on an iPhone or iPad; the regular CI build does not establish that runtime result.
+
+
+## GPU renderer robustness fixes — 2026-11-01
+
+- Fixed mixed-UV triangles in `buildGpuGeometry`: UV presence is now consistent across all three duplicated vertices of a triangle. Texturing is enabled only when all three corners have UV coordinates; otherwise the whole triangle uses vertex color. This prevents the UV-presence varying from interpolating between textured and untextured states inside one primitive.
+- Added `RgbaImage::hasValidRgba8Data()` to validate nonzero dimensions, exact tightly packed RGBA8 byte count, and the SDL_GPU transfer-buffer size limit before texture allocation/upload.
+- Added regression checks for valid decoded RGBA8 data, a mismatched pixel byte count, and dimensions that exceed the supported upload size.
+- GPU frame-render failure now destroys `GpuRenderer` (releasing its window claim) and attempts to recreate `SDL_Renderer`. If CPU renderer recreation also fails, the app exits with an error. This is recovery behavior in source code; runtime failure injection and device-loss recovery have not yet been tested.
+- These source changes were made on `ios/initial-support`. Verify the matching GitHub Actions run before treating them as build-tested. Physical iPhone Metal shader compilation and visual rendering remain unverified.
