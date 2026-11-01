@@ -197,7 +197,7 @@ GitHubには少なくとも次のブランチが存在する。
 | Path | 役割 |
 |---|---|
 | `CMakeLists.txt` | C++20、SDL3 FetchContent、Windows/iOSターゲット、テスト |
-| `src/main.cpp` | デモアプリ、入力、iOSタッチ、GPU/CPU切替、GPUプレビュー |
+| `src/main.cpp` | デモアプリ、入力、iOSタッチ、GPU/CPU切替、CPU fallback |
 | `include/engine/Camera.hpp` / `src/engine/Camera.cpp` | カメラ |
 | `include/engine/CollisionWorld.hpp` / `src/engine/CollisionWorld.cpp` | AABB衝突 |
 | `include/engine/Scene.hpp` / `src/engine/Scene.cpp` | シーンとTransform |
@@ -206,6 +206,7 @@ GitHubには少なくとも次のブランチが存在する。
 | `include/engine/Renderer3D.hpp` / `src/engine/Renderer3D.cpp` | CPUソフトウェアレンダラー |
 | `include/engine/TouchOverlay.hpp` | CPU/GPU共通のオーバーレイ配置・配色・bitmap font定義 |
 | `include/engine/GpuDeviceProbe.hpp` / `src/engine/GpuDeviceProbe.cpp` | SDL_GPU利用可否のProbe |
+| `include/engine/GpuRenderer.hpp` / `src/engine/GpuRenderer.cpp` | SDL_GPU indexed mesh、depth、PPM texture、lighting、overlay |
 | `shaders/Metal/` | iOS向けMSL shader source（まだmain.cppのGPU previewからは未使用） |
 | `shaders/Source/` | HLSL shader source |
 | `assets/demo.obj` | デモ用ピラミッド |
@@ -324,7 +325,7 @@ GitHubには少なくとも次のブランチが存在する。
 - branch HEADを取得。
 - `git status` 相当で未コミット変更を確認。
 - この文書とREADMEを読む。
-- `src/main.cpp`、`Renderer3D.cpp`、`GpuDeviceProbe.cpp`、CMake、workflowを読む。
+- `src/main.cpp`、`Renderer3D.cpp`、`GpuDeviceProbe.cpp`、`GpuRenderer.cpp`、CMake、workflowを読む。
 - ここに書かれた説明と現行コードが異なる場合、コードを正とし、この文書を修正する。
 
 ### Step 2: 既存テストと直近CI
@@ -334,8 +335,7 @@ GitHubには少なくとも次のブランチが存在する。
 - 失敗があれば実装に入る前に原因を特定する。
 
 ### Step 3: 次の作業を一つ選ぶ
-推奨する次の作業は、GPU描画コードをmain.cppから独立したクラスへ分離し、既存GPU三角形プレビューを移すこと。分離前に現行の動作を維持するテストを設計する。
-その後、GPU vertex/index bufferとcamera matrixを実装し、デモOBJを描画する。
+GPU Rendererの分離、indexed mesh描画、depth、PPM texture、lighting、overlayは既に実装されているため、これらを未実装タスクとして再提案しない。次はP0としてGPU resourceの失敗経路・解放・CPU/GPU切替の回帰テストを検討し、その後P1としてiPhone実機でMetal shader、texture sampling、lighting、touch操作を確認する。実機確認はCIの成功で代替できない。
 
 ### Step 4: 実装
 - SDL 3.2.10の実際のAPIヘッダーを確認してから使う。
@@ -496,3 +496,12 @@ CI:
 - Movement parallel to a wall remains available, and movement out of an existing overlap is not blocked.
 - Added regression tests for first-contact stopping, positive/negative tunneling, escape from an existing overlap, wall sliding, and invalid axis input.
 - Build and CI results for this change must be verified against the commit that contains it; this entry does not imply a passing build or physical-device test.
+
+
+## Documentation synchronization — 2026-11-01
+
+- Updated the root README to describe the current arm64 iOS Device unsigned IPA workflow rather than an iOS Simulator artifact.
+- Corrected the GPU backend description to match the current indexed OBJ mesh, depth, P3 PPM texture, lighting, mipmap capability fallback, and GPU overlay implementation.
+- Replaced the obsolete GPU integration plan with the current ownership, switching, failure, shader, and verification behavior.
+- Updated the AI handoff's file map and next-work guidance so GPU renderer extraction and indexed mesh rendering are not listed as pending work.
+- These are documentation-only changes. No source behavior, build configuration, or public API was changed. CI results for the documentation commit must be checked separately.

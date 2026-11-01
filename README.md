@@ -2,7 +2,11 @@
 
 A cross-platform game-engine project, starting with a C++20 foundation.
 
-## AI development handoff\n\nFor a complete, source-oriented handoff covering verified implementation status, branch strategy, iOS builds, GPU renderer status, roadmap, and rules for AI agents, see [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md). Read this before continuing development in a new chat or with another AI.\n\n## Current status
+## AI development handoff
+
+For a complete, source-oriented handoff covering verified implementation status, branch strategy, iOS builds, GPU renderer status, roadmap, and rules for AI agents, see [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md). Read this before continuing development in a new chat or with another AI.
+
+## Current status
 
 - CMake-based C++20 project
 - SDL3 window and event loop
@@ -17,6 +21,7 @@ A cross-platform game-engine project, starting with a C++20 foundation.
 - Near-plane clipping for cube faces and loaded mesh triangles, preserving the visible portion of geometry that crosses the camera's near plane
 - Animated perspective-projected 3D cube with six face colors and all three rotation axes
 - Renders multiple visible scene objects from shared OBJ mesh data, applying each object's position, rotation, scale, and visibility flag
+- Experimental SDL_GPU backend renders indexed OBJ meshes with depth testing, P3 PPM texture sampling, lighting, mipmap capability fallback, and a GPU touch/FPS overlay; physical-device Metal behavior remains unverified
 - Press 1 or 2 to toggle the visibility of each demo pyramid at runtime
 - Press F3 to toggle wireframe rendering for the cube and loaded OBJ meshes
 - Press F11 to toggle between windowed and fullscreen display
@@ -27,7 +32,7 @@ A cross-platform game-engine project, starting with a C++20 foundation.
 - World-space perspective floor grid that responds to camera movement and is occluded by nearer geometry
 - GitHub Actions builds the Windows executable, runs camera, collision, scene-management, and OBJ-loader unit tests plus a rendering smoke test, and uploads the executable as an artifact
 
-> The current renderer is an initial CPU-side projection and SDL rasterization prototype, not yet a modern GPU 3D pipeline. Filled triangles and floor-grid lines use a CPU-side depth buffer; wireframe mode is still drawn as SDL lines without depth testing. Geometry crossing the near plane is clipped instead of being discarded wholesale. To keep frame time and memory bounded when a shape fills the view or the window is high-DPI, filled rendering uses at most 800 x 450 pixels and SDL scales it to the window.
+> The CPU renderer is an initial CPU-side projection and SDL rasterization prototype, not a modern GPU 3D pipeline. Filled triangles and floor-grid lines use a CPU-side depth buffer; wireframe mode is still drawn as SDL lines without depth testing. Geometry crossing the near plane is clipped instead of being discarded wholesale. To keep frame time and memory bounded when a shape fills the view or the window is high-DPI, filled rendering uses at most 800 x 450 pixels and SDL scales it to the window. The separate experimental GPU backend is described below.
 
 ## Camera controls
 
@@ -65,21 +70,19 @@ The collision module supports static axis-aligned bounding boxes (AABBs). Camera
 
 ## iOS support (in progress)
 
-An iOS Simulator build is being added alongside the Windows build. The iOS target is packaged as an unsigned Xcode app bundle and includes the demo OBJ and PPM assets in the app's Resources directory. GitHub Actions builds an arm64 iOS Simulator artifact without requiring an Apple signing certificate.
+The current GitHub Actions workflow builds an arm64 iOS Device app bundle with the Xcode generator and packages it as an unsigned IPA. It includes the demo OBJ and P3 PPM assets in the app bundle. The deployment target is iOS 15.0. The workflow does not produce an iOS Simulator artifact.
 
-The iOS build includes an initial virtual joystick on the left and drag-to-look area on the right, with simultaneous movement and camera look. On-device performance tuning, physical-device testing, and App Store signing/distribution remain incomplete. The workflow currently builds an arm64 iOS Device app bundle and packages it as an unsigned IPA. It is not signed for installation; physical-device execution still requires an appropriate signing/install workflow and on-device testing.
+The app includes an initial virtual joystick on the left and a drag-to-look area on the right, with simultaneous movement and camera look. The IPA is unsigned and is not ready for ordinary device installation or App Store distribution. Physical-device startup, Metal rendering, touch behavior, and performance still require separate on-device verification.
 
-## GPU backend smoke test (experimental)
+## GPU renderer (experimental)
 
-The app has an opt-in `--gpu-smoke-test` mode that bypasses `SDL_Renderer`, creates an SDL GPU device, claims the window, acquires one swapchain texture, clears it, and submits one GPU command buffer. This checks the basic window/swapchain presentation path only; it does not load the HLSL shaders or render 3D geometry.
+The app contains a separate `GpuRenderer` implementation using SDL_GPU. It uploads the demo OBJ mesh to vertex/index buffers, renders visible scene objects with camera and object transforms, uses a depth-stencil attachment, samples the bundled P3 PPM texture, and applies ambient, directional diffuse, and Blinn-Phong specular lighting. It also draws the FPS label and touch-control overlay in a GPU render pass. Texture mipmaps are generated when the device reports the required format support; otherwise the renderer keeps a single-level texture.
 
-On a GPU-capable Windows machine, build the app and run:
+Press **G** on a keyboard, or use the on-screen backend switch control on touch devices, to request a CPU/GPU switch. If GPU initialization fails, the app attempts to recreate the CPU renderer. A GPU frame-rendering failure currently ends the app rather than automatically switching back.
 
-```powershell
-.\\build\\Release\\originalengine_app.exe --gpu-smoke-test
-```
+The current GPU path requests MSL shaders and is intended for Metal-capable devices. Windows GPU runtime activation and physical iPhone/iPad Metal rendering have not been verified by the repository's CI. The CPU software renderer remains available as a separate backend. MTL materials, multiple materials/textures, PNG/JPEG GPU texture loading, GPU wireframe, and a shared CPU/GPU renderer interface are not implemented.
 
-A successful run is reported in the startup diagnostic log. This test is not currently part of CI and has not been verified on a physical iPhone/iPad.
+The separate `--gpu-smoke-test` command only checks SDL_GPU device/window/swapchain submission; it does not exercise the indexed mesh renderer. It is not part of the current CI workflow.
 
 ## Build on Windows
 
@@ -116,10 +119,9 @@ tests/                Automated camera, collision, and scene tests
 1. Initial application and build foundation
 2. First 3D projection and colored cube
 3. First-person camera and movement
-4. GPU-backed rendering and depth testing
-5. Scene object instances and loaded mesh rendering
-6. Texture/material loading, audio, and physics
-7. Platform support expansion
+4. Validate GPU resource lifecycle, failure recovery, and Metal rendering on a physical iPhone
+5. Expand GPU material support, image formats, and wireframe rendering
+6. Improve physics, audio, and platform support
 
 
 ---
@@ -128,7 +130,11 @@ tests/                Automated camera, collision, and scene tests
 
 Gasoline Engine は、C++20 を基盤として開発しているクロスプラットフォーム向けゲームエンジンのプロジェクトです。
 
-## AI開発引き継ぎ資料\n\n別のAIや新しいチャットで開発を継続する場合は、実装状況・ブランチ・iOSビルド・GPU描画の状態・ロードマップ・開発ルールをまとめた [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md) を最初に読んでください。\n\n## 現在の機能
+## AI開発引き継ぎ資料
+
+別のAIや新しいチャットで開発を継続する場合は、実装状況・ブランチ・iOSビルド・GPU描画の状態・ロードマップ・開発ルールをまとめた [docs/AI_HANDOFF.md](docs/AI_HANDOFF.md) を最初に読んでください。
+
+## 現在の機能
 
 - CMake を使用した C++20 プロジェクト
 - SDL3 によるウィンドウ管理とイベントループ
@@ -148,7 +154,7 @@ Gasoline Engine は、C++20 を基盤として開発しているクロスプラ�
 - 塗りつぶしポリゴンとフロアグリッド線に対応した CPU 側 Z バッファによるピクセル単位の奥行き判定
 - GitHub Actions による Windows 実行ファイルのビルド、カメラ・衝突判定・シーン管理・OBJ ローダーのユニットテスト、描画スモークテスト、および成果物のアップロード
 
-> 現在の描画機能は CPU 側のソフトウェアラスタライザーです。透視投影、ピクセル単位の Z バッファ、透視補正付き UV テクスチャ描画、近接平面クリッピング、深度判定付きワイヤーフレームに対応しています。SDL_Renderer は完成した CPU 描画バッファの表示に使用しています。まだ SDL GPU API を使った GPU 3D パイプラインは実装されていません。
+> CPU 側には透視投影、Z バッファ、透視補正付き UV テクスチャ描画、近接平面クリッピング、ワイヤーフレームに対応したソフトウェアレンダラーがあります。別経路の実験的な SDL_GPU レンダラーもあり、OBJ メッシュ、シーンオブジェクト、深度テスト、P3 PPM テクスチャ、ライティング、タッチオーバーレイを描画します。GPU 経路は MSL を使用し、iPhone 実機での Metal 動作は未確認です。
 
 ## カメラ操作
 
@@ -180,17 +186,15 @@ Gasoline Engine は、C++20 を基盤として開発しているクロスプラ�
 - C++20 対応コンパイラ
 - Git と初回構成時のインターネット接続（CMake が SDL3 をダウンロードします）
 
-## GPU バックエンドのスモークテスト（実験段階）
+## GPU レンダラー（実験段階）
 
-`--gpu-smoke-test` を指定すると、通常の `SDL_Renderer` を作成せずに SDL GPU デバイスを作成し、ウィンドウを GPU に割り当て、スワップチェーンのテクスチャを取得して単色クリアした後、GPU コマンドバッファを送信します。これはウィンドウとスワップチェーンの基本的な表示経路を確認するテストです。HLSL シェーダーの読み込みや 3D メッシュの描画は行いません。
+`GpuRenderer` は SDL_GPU を使い、デモ OBJ メッシュを頂点 / インデックスバッファへアップロードして、カメラと各 SceneObject の Transform を反映した描画を行います。深度ステンシル、P3 PPM テクスチャのサンプリング、環境光・方向光・Blinn-Phong スペキュラ、FPS 表示とタッチ操作オーバーレイに対応しています。デバイスが必要な形式をサポートする場合はテクスチャ mipmap を生成し、非対応の場合は単一レベルで動作します。
 
-Windows でビルドした後、次のコマンドで実行できます。
+キーボードの **G** キー、またはタッチ画面上のバックエンド切替操作で CPU / GPU の切替を要求できます。GPU 初期化に失敗した場合は CPU レンダラーの再生成を試みます。一方、GPU のフレーム描画が失敗した場合、現在の実装は自動で CPU に戻らずアプリを終了します。
 
-```powershell
-.\\build\\Release\\originalengine_app.exe --gpu-smoke-test
-```
+GPU 経路は MSL シェーダーを要求し、Metal 対応デバイスを主な対象としています。Windows での GPU 実行と iPhone 実機での Metal 描画は未確認です。CPU ソフトウェアレンダラーは別経路として維持されています。MTL マテリアル、複数マテリアル / テクスチャ、PNG / JPEG の GPU テクスチャ読み込み、GPU ワイヤーフレーム、CPU / GPU 共通 Renderer API は未実装です。
 
-成功・失敗は起動診断ログに記録されます。現時点では CI のテスト対象ではなく、実機 iPhone / iPad での動作も未確認です。
+別途用意されている `--gpu-smoke-test` は SDL_GPU デバイス・ウィンドウ・スワップチェーンの基本的な送信経路を確認するだけで、OBJ メッシュレンダラーの検証ではありません。現在の CI ワークフローには含まれていません。
 
 ## Windows でビルドする
 
@@ -224,10 +228,7 @@ tests/                カメラ・衝突判定・シーンなどのテスト
 
 ## 開発ロードマップ
 
-1. アプリケーションとビルド環境の基礎
-2. 3D 透視投影とカラーキューブ
-3. 一人称カメラと移動操作
-4. SDL GPU API による GPU 描画（CPU 描画へのフォールバックを維持）
-5. シーンオブジェクトと読み込んだメッシュの描画
-6. テクスチャ / マテリアル、音声、物理演算
-7. 対応プラットフォームの拡張
+1. GPU リソースの失敗経路・解放・切替安定性の検証
+2. iPhone 実機での Metal 描画とタッチ操作の確認
+3. GPU マテリアル、追加画像形式、ワイヤーフレームへの対応
+4. 音声・物理演算・対応プラットフォームの拡張
