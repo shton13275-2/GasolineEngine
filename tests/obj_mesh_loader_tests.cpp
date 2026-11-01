@@ -49,13 +49,15 @@ int main() {
 
     std::istringstream negativeIndices(
         "v 0 0 0\nv 1 0 0\nv 0 1 0\n"
-        "vt 0.25 0.75\nvn 0 1 0\nf -3/-1/-1 -2/-1/-1 -1/-1/-1\n");
+        "vt -0.25 -0.75\nvn 0 1 0\nf -3/-1/-1 -2/-1/-1 -1/-1/-1\n");
     originalengine::Mesh negativeMesh;
     if (!originalengine::ObjMeshLoader::loadFromStream(negativeIndices, negativeMesh, &error) ||
         negativeMesh.triangles.size() != 1 ||
         negativeMesh.triangles[0].indices != std::array<std::size_t, 3>{0, 1, 2} ||
-        !negativeMesh.vertices[0].hasTexCoord || !negativeMesh.vertices[0].hasNormal) {
-        std::cerr << "Negative OBJ indices were not handled correctly: " << error << '\n';
+        !negativeMesh.vertices[0].hasTexCoord || !negativeMesh.vertices[0].hasNormal ||
+        std::abs(negativeMesh.vertices[0].u + 0.25F) > 1.0e-6F ||
+        std::abs(negativeMesh.vertices[0].v + 0.75F) > 1.0e-6F) {
+        std::cerr << "Negative OBJ indices or UV coordinates were not handled correctly: " << error << '\n';
         return 1;
     }
 

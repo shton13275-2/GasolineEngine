@@ -20,6 +20,7 @@ struct GpuVertex {
     float normal[3];
     float color[3];
     float uv[2];
+    float hasTexCoord;
 };
 
 using Matrix4 = std::array<float, 16>;
@@ -40,6 +41,7 @@ struct VertexInput {
     float3 normal [[attribute(1)]];
     float3 color [[attribute(2)]];
     float2 uv [[attribute(3)]];
+    float hasTexCoord [[attribute(4)]];
 };
 
 struct VertexOutput {
@@ -47,6 +49,7 @@ struct VertexOutput {
     float3 normal;
     float3 color;
     float2 uv;
+    float hasTexCoord;
     float3 viewDirection;
 };
 
@@ -67,6 +70,7 @@ vertex VertexOutput main_vertex(
     output.normal = normalize((camera.normalMatrix * float4(input.normal, 0.0)).xyz);
     output.color = input.color;
     output.uv = input.uv;
+    output.hasTexCoord = input.hasTexCoord;
     output.viewDirection = normalize(camera.cameraPosition.xyz - worldPosition.xyz);
     return output;
 }
@@ -89,7 +93,7 @@ fragment float4 main_fragment(
     texture2d<float> baseColorTexture [[texture(0)]],
     sampler baseColorSampler [[sampler(0)]])
 {
-    const float3 albedo = any(input.uv < float2(0.0))
+    const float3 albedo = input.hasTexCoord < 0.5
         ? input.color
         : baseColorTexture.sample(baseColorSampler, input.uv).rgb * input.color;
     const float3 normal = normalize(input.normal);
@@ -402,7 +406,8 @@ bool buildGpuGeometry(const Mesh& mesh, std::vector<GpuVertex>& vertices,
             vertex.color[1] = 1.0F;
             vertex.color[2] = 1.0F;
             vertex.uv[0] = corner->hasTexCoord ? corner->u : -1.0F;
-            vertex.uv[1] = corner->hasTexCoord ? 1.0F - corner->v : -1.0F;
+            vertex.uv[1] = corner->hasTexCoord ? 1.0F - corner->v : 0.0F;
+            vertex.hasTexCoord = corner->hasTexCoord ? 1.0F : 0.0F;
             const auto index = static_cast<std::uint32_t>(vertices.size());
             vertices.push_back(vertex);
             indices.push_back(index);
@@ -704,7 +709,8 @@ bool GpuRenderer::initialize(SDL_Window* window, const Mesh& mesh, const RgbaIma
         {0, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, static_cast<Uint32>(offsetof(GpuVertex, position))},
         {1, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, static_cast<Uint32>(offsetof(GpuVertex, normal))},
         {2, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, static_cast<Uint32>(offsetof(GpuVertex, color))},
-        {3, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, static_cast<Uint32>(offsetof(GpuVertex, uv))}
+        {3, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, static_cast<Uint32>(offsetof(GpuVertex, uv))},
+        {4, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT, static_cast<Uint32>(offsetof(GpuVertex, hasTexCoord))}
     };
 
     SDL_GPUColorTargetDescription colorTarget{};
@@ -716,7 +722,7 @@ bool GpuRenderer::initialize(SDL_Window* window, const Mesh& mesh, const RgbaIma
     pipelineInfo.vertex_input_state.vertex_buffer_descriptions = &vertexBufferDescription;
     pipelineInfo.vertex_input_state.num_vertex_buffers = 1;
     pipelineInfo.vertex_input_state.vertex_attributes = attributes;
-    pipelineInfo.vertex_input_state.num_vertex_attributes = 4;
+    pipelineInfo.vertex_input_state.num_vertex_attributes = 5;
     pipelineInfo.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
     pipelineInfo.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
     pipelineInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;

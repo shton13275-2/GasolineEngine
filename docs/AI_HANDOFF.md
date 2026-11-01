@@ -133,7 +133,7 @@ GitHubには少なくとも次のブランチが存在する。
 - カメラのview/projectionと各SceneObjectのmodel transformを使い、複数オブジェクトをindexed drawする。
 - Depth-Stencil Attachmentを作成し、depth test/writeを有効化。画面サイズ変更時はdepth textureを再作成する。
 - P3 ASCII PPMをRGBA8へ変換するPpmImageLoaderを追加。GPU側でSDL_GPUTextureへ転送し、fragment sampler slot 0へbindする。
-- OBJのUVはGPUへ渡し、画像の行方向に合わせてVを反転する。UVがない頂点はテクスチャを参照しないfallbackにする。
+- OBJのUVはGPUへ渡し、画像の行方向に合わせてVを反転する。UVの有無は専用の頂点属性で管理し、負のUV値や0〜1範囲外の有効な座標を欠落扱いしない。UVがない頂点のみテクスチャなしfallbackにする。
 - OBJにvnがある場合はその法線を使用し、ない場合は三角形ごとのflat normalを生成する。
 - per-object uniformにMVP、model、inverse-transpose normal matrix、camera positionを渡す。fragment shaderはambient、directional diffuse、Blinn-Phong specularを計算する。
 - GPU overlayはタッチガイド、FPS、CPU切替ボタンを描画する。CPU側のfallbackは維持する。
@@ -505,3 +505,11 @@ CI:
 - Replaced the obsolete GPU integration plan with the current ownership, switching, failure, shader, and verification behavior.
 - Updated the AI handoff's file map and next-work guidance so GPU renderer extraction and indexed mesh rendering are not listed as pending work.
 - These are documentation-only changes. No source behavior, build configuration, or public API was changed. CI results for the documentation commit must be checked separately.
+
+
+## GPU negative UV coordinate fix — 2026-11-01
+
+- Fixed the GPU fragment shader's missing-UV detection. It previously treated any negative U or V value as a missing texture coordinate, even though negative/out-of-range OBJ UV coordinates are valid and the sampler uses repeat addressing.
+- Added a dedicated per-vertex UV-presence attribute and use it to select the untextured fallback. UV numeric values are no longer overloaded as a presence sentinel.
+- Extended the OBJ loader regression fixture to include negative U/V values and assert they are preserved.
+- The CI build can compile the C++ integration and run the OBJ parser regression test. The repository CI does not compile the embedded MSL shader or verify Metal sampling on a physical iPhone; that runtime behavior remains to be checked on device.

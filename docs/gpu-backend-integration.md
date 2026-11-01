@@ -8,6 +8,7 @@ This document describes the implementation on `ios/initial-support`, not an unim
 - `src/main.cpp` owns the CPU/GPU backend transition. Before GPU initialization it destroys the active `SDL_Renderer`; if GPU initialization fails, it destroys the partial GPU renderer and attempts to recreate the CPU renderer.
 - `GpuRenderer::initialize` creates an SDL_GPU device requesting `SDL_GPU_SHADERFORMAT_MSL`, claims the window, creates the graphics pipelines and depth attachment, uploads mesh vertex/index buffers, and creates the texture/sampler.
 - Mesh upload converts the loaded OBJ triangles to indexed GPU geometry. The current demo uses the existing mesh and visible scene-object transforms.
+- UV presence is carried as a dedicated vertex attribute instead of using a negative UV sentinel. Negative and out-of-range OBJ UV values therefore remain valid inputs to the repeat-addressed texture sampler.
 - Per-object constants include model, MVP, inverse-transpose normal matrix, and camera position. OBJ vertex normals are used when valid; missing normals use generated flat face normals.
 - The mesh pass uses depth testing/writes and a depth-stencil texture. The depth texture is recreated when the swapchain dimensions change.
 - The GPU fragment shader samples the P3 PPM-derived RGBA texture and applies ambient, directional diffuse, and Blinn-Phong specular lighting.

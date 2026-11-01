@@ -80,7 +80,7 @@ The app contains a separate `GpuRenderer` implementation using SDL_GPU. It uploa
 
 Press **G** on a keyboard, or use the on-screen backend switch control on touch devices, to request a CPU/GPU switch. If GPU initialization fails, the app attempts to recreate the CPU renderer. A GPU frame-rendering failure currently ends the app rather than automatically switching back.
 
-The current GPU path requests MSL shaders and is intended for Metal-capable devices. Windows GPU runtime activation and physical iPhone/iPad Metal rendering have not been verified by the repository's CI. The CPU software renderer remains available as a separate backend. MTL materials, multiple materials/textures, PNG/JPEG GPU texture loading, GPU wireframe, and a shared CPU/GPU renderer interface are not implemented.
+The GPU mesh path tracks UV presence separately from UV values, so valid negative or out-of-range OBJ UV coordinates are still sampled using the texture's repeat addressing. The current GPU path requests MSL shaders and is intended for Metal-capable devices. Windows GPU runtime activation and physical iPhone/iPad Metal rendering have not been verified by the repository's CI. The CPU software renderer remains available as a separate backend. MTL materials, multiple materials/textures, PNG/JPEG GPU texture loading, GPU wireframe, and a shared CPU/GPU renderer interface are not implemented.
 
 The separate `--gpu-smoke-test` command only checks SDL_GPU device/window/swapchain submission; it does not exercise the indexed mesh renderer. It is not part of the current CI workflow.
 
@@ -192,7 +192,7 @@ Gasoline Engine は、C++20 を基盤として開発しているクロスプラ�
 
 キーボードの **G** キー、またはタッチ画面上のバックエンド切替操作で CPU / GPU の切替を要求できます。GPU 初期化に失敗した場合は CPU レンダラーの再生成を試みます。一方、GPU のフレーム描画が失敗した場合、現在の実装は自動で CPU に戻らずアプリを終了します。
 
-GPU 経路は MSL シェーダーを要求し、Metal 対応デバイスを主な対象としています。Windows での GPU 実行と iPhone 実機での Metal 描画は未確認です。CPU ソフトウェアレンダラーは別経路として維持されています。MTL マテリアル、複数マテリアル / テクスチャ、PNG / JPEG の GPU テクスチャ読み込み、GPU ワイヤーフレーム、CPU / GPU 共通 Renderer API は未実装です。
+GPU メッシュ描画では UV の有無を UV 数値とは別に管理するため、負の値や 0〜1 の範囲外にある有効な OBJ UV 座標も、テクスチャの repeat アドレス指定でサンプリングされます。GPU 経路は MSL シェーダーを要求し、Metal 対応デバイスを主な対象としています。Windows での GPU 実行と iPhone 実機での Metal 描画は未確認です。CPU ソフトウェアレンダラーは別経路として維持されています。MTL マテリアル、複数マテリアル / テクスチャ、PNG / JPEG の GPU テクスチャ読み込み、GPU ワイヤーフレーム、CPU / GPU 共通 Renderer API は未実装です。
 
 別途用意されている `--gpu-smoke-test` は SDL_GPU デバイス・ウィンドウ・スワップチェーンの基本的な送信経路を確認するだけで、OBJ メッシュレンダラーの検証ではありません。現在の CI ワークフローには含まれていません。
 
