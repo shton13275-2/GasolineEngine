@@ -545,3 +545,14 @@ CI:
 - The documentation-only merge into `main` also passed its Windows workflow [41301235618](https://github.com/shton13275-2/GasolineEngine/actions/runs/41301235618). That run does not verify the GPU source branch.
 - GPU frame-failure fallback remains source-reviewed but has no failure-injection test. SDL_GPU mesh rendering, embedded MSL compilation, Metal texture sampling, and visual output remain unverified on a physical iPhone/iPad.
 - After this follow-up commit, re-check the new commit's own Windows and iOS workflow results before describing the new test as CI-passing.
+
+
+## GPU frame recovery regression test — 2026-11-01
+
+- Added `include/engine/GpuFrameRecovery.hpp` with a small callback-driven recovery helper shared by the production main loop and the unit test.
+- The helper returns `GpuRendered` without releasing resources after a successful GPU frame.
+- After a failed GPU frame, it invokes GPU release before CPU renderer creation and returns `CpuFallbackReady` or `Fatal` depending on CPU renderer recreation.
+- Replaced the inline GPU-frame recovery branch in `src/main.cpp` with the shared helper while keeping SDL resource ownership in the application callbacks.
+- Added `tests/gpu_frame_recovery_tests.cpp` and the `gpu_frame_recovery` CTest target. It covers GPU success, successful CPU fallback, failed CPU fallback, and callback order.
+- The test validates control flow only. It does not inject a real SDL_GPU failure or verify SDL window-claim transitions, Metal runtime behavior, or physical iPhone recovery.
+- CI must run against this commit before this change is considered verified. Physical iPhone/LiveContainer testing remains outstanding.

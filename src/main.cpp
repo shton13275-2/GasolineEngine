@@ -2,6 +2,7 @@
 #include "engine/CollisionWorld.hpp"
 #include "engine/Renderer3D.hpp"
 #include "engine/GpuDeviceProbe.hpp"
+#include "engine/GpuFrameRecovery.hpp"
 #include "engine/GpuRenderer.hpp"
 #include "engine/ObjMeshLoader.hpp"
 #include "engine/PpmImageLoader.hpp"
@@ -504,30 +505,41 @@ int main(int argc, char* argv[]) {
             }
 
             if (gpuMode) {
-                if (gpuRenderer == nullptr || !gpuRenderer->renderFrame(
-                        camera, gpuSceneObjects, !smokeTest, hasMovementFinger,
-                        movementX, movementY, smoothedFps)) {
-                    const std::string gpuFailure = gpuRenderer != nullptr
-                        ? gpuRenderer->lastError() : "renderer unavailable";
-                    writeDiagnostic("GPU mesh frame failed: " + gpuFailure);
+                const std::string gpuFailure = gpuRenderer != nullptr
+                    ? gpuRenderer->lastError() : "renderer unavailable";
+                const auto recovery = originalengine::runGpuFrameWithCpuFallback(
+                    [&]() {
+                        return gpuRenderer != nullptr && gpuRenderer->renderFrame(
+                            camera, gpuSceneObjects, !smokeTest, hasMovementFinger,
+                            movementX, movementY, smoothedFps);
+                    },
+                    [&]() {
+                        // Destroying GpuRenderer releases its window claim before
+                        // SDL_Renderer attempts to take ownership again.
+                        gpuRenderer.reset();
+                        gpuMode = false;
+                    },
+                    [&]() {
+                        renderer = SDL_CreateRenderer(window, nullptr);
+                        if (renderer == nullptr) return false;
+                        (void)SDL_SetRenderVSync(renderer, 1);
+                        renderer3D = std::make_unique<originalengine::Renderer3D>(renderer);
+                        return true;
+                    });
 
-                    // GpuRenderer releases its window claim during destruction,
-                    // allowing SDL_Renderer to take ownership again.
-                    gpuRenderer.reset();
-                    gpuMode = false;
-                    renderer = SDL_CreateRenderer(window, nullptr);
-                    if (renderer == nullptr) {
-                        logSdlError("SDL_CreateRenderer after GPU frame failure");
-                        exitCode = 1;
-                        break;
-                    }
-                    (void)SDL_SetRenderVSync(renderer, 1);
-                    renderer3D = std::make_unique<originalengine::Renderer3D>(renderer);
-                    SDL_SetWindowTitle(window, "Gasoline Engine | G: switch to GPU");
-                    writeDiagnostic("GPU frame failed; CPU renderer restored");
-                } else {
+                if (recovery == originalengine::GpuFrameRecoveryResult::GpuRendered) {
                     continue;
                 }
+                if (recovery == originalengine::GpuFrameRecoveryResult::Fatal) {
+                    writeDiagnostic("GPU frame failed: " + gpuFailure);
+                    logSdlError("SDL_CreateRenderer after GPU frame failure");
+                    exitCode = 1;
+                    break;
+                }
+
+                SDL_SetWindowTitle(window, "Gasoline Engine | G: switch to GPU");
+                writeDiagnostic("GPU frame failed: " + gpuFailure);
+                writeDiagnostic("GPU frame failed; CPU renderer restored");
             }
 
             if (exitCode != 0) break;

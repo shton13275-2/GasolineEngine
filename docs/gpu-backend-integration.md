@@ -50,3 +50,12 @@ Keyboard input **G** requests a backend switch. The touch interface also has a t
 - The iOS workflow configures an iOS Device arm64 target, builds the unsigned app, packages an IPA, and checks archive contents. It does not run the app on a physical device.
 - Keep CI build success, IPA packaging success, physical-device startup, and successful Metal rendering as separate verification results.
 - The standalone `--gpu-smoke-test` path checks SDL_GPU device/window/swapchain submission only; it is not a mesh-rendering test and is not part of the current build workflow.
+
+
+## GPU frame recovery control-flow test
+
+- `include/engine/GpuFrameRecovery.hpp` contains the shared `runGpuFrameWithCpuFallback` control flow used by the production main loop and its unit test.
+- On GPU success, the helper returns `GpuRendered` without invoking release or CPU creation callbacks.
+- On GPU failure, it invokes GPU release first, then CPU renderer creation, returning `CpuFallbackReady` or `Fatal`.
+- `gpu_frame_recovery` tests all three result paths and the callback ordering.
+- This is a deterministic control-flow test. It does not inject an SDL_GPU failure, validate SDL window-claim release/reclaim, or establish physical-device Metal recovery.

@@ -140,4 +140,8 @@ if(BUILD_TESTING)
     add_executable(originalengine_gpu_geometry_tests tests/gpu_geometry_rules_tests.cpp)
     target_link_libraries(originalengine_gpu_geometry_tests PRIVATE originalengine)
     add_test(NAME gpu_geometry_rules COMMAND originalengine_gpu_geometry_tests)
+
+    add_executable(originalengine_gpu_frame_recovery_tests tests/gpu_frame_recovery_tests.cpp)
+    target_link_libraries(originalengine_gpu_frame_recovery_tests PRIVATE originalengine)
+    add_test(NAME gpu_frame_recovery COMMAND originalengine_gpu_frame_recovery_tests)
 endif()

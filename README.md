@@ -30,7 +30,7 @@ For a complete, source-oriented handoff covering verified implementation status,
 - Filled triangles and floor-grid lines use a CPU-side Z-buffer for per-pixel visibility
 - Software filled rendering is capped at 360,000 pixels per frame and scaled by SDL, preventing high-DPI windows and resizing from causing unbounded CPU and memory use
 - World-space perspective floor grid that responds to camera movement and is occluded by nearer geometry
-- GitHub Actions builds the Windows executable, runs camera, collision, scene-management, OBJ-loader, PPM image, software-renderer, and GPU geometry-rule unit tests plus a rendering smoke test, and uploads the executable as an artifact
+- GitHub Actions builds the Windows executable, runs camera, collision, scene-management, OBJ-loader, PPM image, software-renderer, and GPU geometry-rule and GPU frame-recovery unit tests plus a rendering smoke test, and uploads the executable as an artifact
 
 > The CPU renderer is an initial CPU-side projection and SDL rasterization prototype, not a modern GPU 3D pipeline. Filled triangles and floor-grid lines use a CPU-side depth buffer; wireframe mode is still drawn as SDL lines without depth testing. Geometry crossing the near plane is clipped instead of being discarded wholesale. To keep frame time and memory bounded when a shape fills the view or the window is high-DPI, filled rendering uses at most 800 x 450 pixels and SDL scales it to the window. The separate experimental GPU backend is described below.
 
@@ -232,3 +232,8 @@ tests/                カメラ・衝突判定・シーンなどのテスト
 2. iPhone 実機での Metal 描画とタッチ操作の確認
 3. GPU マテリアル、追加画像形式、ワイヤーフレームへの対応
 4. 音声・物理演算・対応プラットフォームの拡張
+
+
+## GPU frame recovery test
+
+The `gpu_frame_recovery` unit test exercises the shared control flow used by the application when a GPU frame succeeds or fails. It verifies that GPU resources are not released on success, that GPU release happens before CPU renderer recreation after a failure, and that a failed CPU recreation is reported as fatal. The test validates callback ordering and result selection; it does not simulate SDL_GPU device loss, a real window-claim transition, or Metal runtime behavior.
