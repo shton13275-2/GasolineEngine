@@ -1,6 +1,7 @@
 #include "engine/PpmImageLoader.hpp"
 
 #include <iostream>
+#include <limits>
 #include <sstream>
 #include <string>
 
@@ -27,6 +28,24 @@ int main() {
             std::cerr << "Unexpected RGBA channel at index " << i << ".\n";
             return 1;
         }
+    }
+
+    if (!image.hasValidRgba8Data()) {
+        std::cerr << "Decoded image should contain tightly packed RGBA8 data.\n";
+        return 1;
+    }
+    originalengine::RgbaImage shortImage = image;
+    shortImage.pixels.pop_back();
+    if (shortImage.hasValidRgba8Data()) {
+        std::cerr << "RGBA8 data with an incorrect byte count should be rejected.\n";
+        return 1;
+    }
+    originalengine::RgbaImage oversizedImage;
+    oversizedImage.width = std::numeric_limits<std::uint32_t>::max();
+    oversizedImage.height = std::numeric_limits<std::uint32_t>::max();
+    if (oversizedImage.hasValidRgba8Data()) {
+        std::cerr << "RGBA8 dimensions exceeding the SDL upload limit should be rejected.\n";
+        return 1;
     }
 
     const originalengine::RgbaImage preserved = image;
