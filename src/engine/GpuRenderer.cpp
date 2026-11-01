@@ -385,6 +385,11 @@ bool buildGpuGeometry(const Mesh& mesh, std::vector<GpuVertex>& vertices,
         }
 
         const float faceNormal[3]{nx / length, ny / length, nz / length};
+        // A varying is interpolated across a primitive. Keep UV presence constant
+        // for all three duplicated vertices so mixed OBJ corners cannot create
+        // partially textured fragments within one triangle.
+        const bool triangleHasTexCoords =
+            a.hasTexCoord && b.hasTexCoord && c.hasTexCoord;
         const MeshVertex* corners[3]{&a, &b, &c};
         for (const MeshVertex* corner : corners) {
             GpuVertex vertex{};
@@ -406,9 +411,9 @@ bool buildGpuGeometry(const Mesh& mesh, std::vector<GpuVertex>& vertices,
             vertex.color[0] = 1.0F;
             vertex.color[1] = 1.0F;
             vertex.color[2] = 1.0F;
-            vertex.uv[0] = corner->hasTexCoord ? corner->u : -1.0F;
-            vertex.uv[1] = corner->hasTexCoord ? 1.0F - corner->v : 0.0F;
-            vertex.hasTexCoord = corner->hasTexCoord ? 1.0F : 0.0F;
+            vertex.uv[0] = triangleHasTexCoords ? corner->u : 0.0F;
+            vertex.uv[1] = triangleHasTexCoords ? 1.0F - corner->v : 0.0F;
+            vertex.hasTexCoord = triangleHasTexCoords ? 1.0F : 0.0F;
             const auto index = static_cast<std::uint32_t>(vertices.size());
             vertices.push_back(vertex);
             indices.push_back(index);
@@ -502,12 +507,10 @@ bool GpuRenderer::initialize(SDL_Window* window, const Mesh& mesh, const RgbaIma
     if (!buildGpuGeometry(mesh, vertices, indices, lastError_)) {
         return false;
     }
-    if (texture.empty()) {
-        lastError_ = "Cannot initialize GPU renderer without a valid RGBA texture";
-        return false;
-    }
-    if (texture.pixels.size() > std::numeric_limits<Uint32>::max()) {
-        lastError_ = "Texture upload exceeds SDL_GPU transfer buffer size limits";
+    if (!texture.hasValidRgba8Data()) {
+        lastError_ =
+            "GPU texture must contain exactly width * height * 4 RGBA8 bytes "
+            "within SDL_GPU transfer buffer size limits";
         return false;
     }
 
