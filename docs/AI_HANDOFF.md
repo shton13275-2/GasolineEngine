@@ -147,7 +147,7 @@ GitHubには少なくとも次のブランチが存在する。
 ### 未実装・未確認
 - MTL material parsing、materialごとの複数texture。
 - PNG/JPEG/BMPのGPU texture loader（現GPU loaderはP3 PPMのみ）。
-- mipmap生成、anisotropic filtering、normal map。
+- mipmapは対応形式で生成し、非対応時は単一レベルへfallbackする。anisotropic filteringとnormal mapは未実装。
 - GPU wireframe modeとCPU/GPU共通Renderer API。
 - iPhone実機でのMetal shader compile、texture sampling、lightingの見た目、タッチ操作。
 - GPU/CPU切替を繰り返した場合の長時間安定性・resource leak。
@@ -245,7 +245,7 @@ GitHubには少なくとも次のブランチが存在する。
 - GPU mesh描画はOBJ、SceneObject、Camera、depth testに対応するが、GPU wireframeや全CPU描画機能の移植は未完了。
 - GPUの実行時mesh shaderはGpuRenderer.cpp内のMSL文字列。shaders/Metal内の別ファイルは実行時ロードしていない。
 - GPU texture samplingはP3 ASCII PPMに対応。PNG/JPEG/BMPのGPU upload、MTL material parser、複数material/textureは未実装。
-- mipmap、normal map、anisotropic filteringは未実装。
+- mipmap生成は対応形式で実装済み。normal mapとanisotropic filteringは未実装。
 - iOSの物理端末GPU/Metal検証はCIだけではできない。
 - AABB以外の本格的な物理・衝突は未実装。
 - iOSの物理端末GPU検証はCIだけではできない。
