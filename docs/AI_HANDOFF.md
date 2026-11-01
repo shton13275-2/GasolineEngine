@@ -197,7 +197,8 @@ GitHubには少なくとも次のブランチが存在する。
 | Path | 役割 |
 |---|---|
 | `CMakeLists.txt` | C++20、SDL3 FetchContent、Windows/iOSターゲット、テスト |
-| `src/main.cpp` | デモアプリ、入力、iOSタッチ、GPU/CPU切替、CPU fallback || `include/engine/Camera.hpp` / `src/engine/Camera.cpp` | カメラ |
+| `src/main.cpp` | デモアプリ、入力、iOSタッチ、GPU/CPU切替、CPU fallback |
+| `include/engine/Camera.hpp` / `src/engine/Camera.cpp` | カメラ |
 | `include/engine/CollisionWorld.hpp` / `src/engine/CollisionWorld.cpp` | AABB衝突 |
 | `include/engine/Scene.hpp` / `src/engine/Scene.cpp` | シーンとTransform |
 | `include/engine/Mesh.hpp` | MeshVertex/MeshTriangle/Mesh |
@@ -396,6 +397,7 @@ CI:
 - SDL_shadercross: https://github.com/libsdl-org/SDL_shadercross
 - SDL GPU examples: https://github.com/TheSpydog/SDL_gpu_examples
 - GitHub README guidance: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-readmes
+
 ---
 
 ## 追記履歴
