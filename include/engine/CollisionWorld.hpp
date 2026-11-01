@@ -19,7 +19,7 @@ public:
     void addObstacle(Aabb obstacle);
     [[nodiscard]] bool overlaps(float x, float y, float z, float radius) const noexcept;
 
-    // Moves each axis independently, allowing the camera to slide along walls.
+    // Resolves one axis at a time, stopping at first contact to prevent AABB tunneling.
     [[nodiscard]] float resolveAxis(float currentX, float currentY, float currentZ,
                                     float displacement, float radius,
                                     int axis) const noexcept;

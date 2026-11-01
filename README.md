@@ -7,7 +7,7 @@ A cross-platform game-engine project, starting with a C++20 foundation.
 - CMake-based C++20 project
 - SDL3 window and event loop
 - First-person camera with WASD movement and mouse-look
-- Axis-aligned collision world; camera movement is blocked by obstacles and slides along walls
+- Axis-aligned collision world; axis-wise camera movement stops at the first obstacle boundary, preventing large steps from passing through an AABB while still allowing wall sliding
 - Basic scene registry with unique object names, transform data, visibility flags, lookup, and removal
 - Wavefront OBJ loader for positions, optional UV coordinates and normals, polygon triangulation, negative indices, and per-corner attribute indexing
 - Q/E vertical movement; Shift for faster movement
@@ -55,7 +55,7 @@ The top-left debug overlay displays a smoothed FPS estimate, camera position (X/
 
 ## Collision prototype
 
-The collision module supports static axis-aligned bounding boxes (AABBs). Camera movement resolves X, Y and Z separately to prevent entering a box and to allow sliding along its faces. This is a prototype; rotating meshes, slopes, stair stepping and a full capsule controller are not implemented yet.
+The collision module supports static axis-aligned bounding boxes (AABBs). Camera movement resolves X, Y and Z separately. Each axis step stops at the first AABB contact boundary, including when a large displacement would otherwise pass completely through an obstacle; unobstructed axes can still move so the camera can slide along faces. This is a prototype; rotating meshes, slopes, stair stepping and a full capsule controller are not implemented yet.
 
 ## Requirements
 
@@ -133,7 +133,7 @@ Gasoline Engine は、C++20 を基盤として開発しているクロスプラ�
 - CMake を使用した C++20 プロジェクト
 - SDL3 によるウィンドウ管理とイベントループ
 - WASD 移動とマウス視点操作に対応した一人称カメラ
-- 軸平行境界ボックス（AABB）による衝突判定。障害物への進入を防ぎ、壁に沿った移動が可能
+- 軸平行境界ボックス（AABB）による衝突判定。各軸の移動を最初の接触位置で止め、大きな移動量でも障害物をすり抜けず、壁沿いの移動も可能
 - オブジェクト名の一意性、Transform、表示・非表示、検索、削除に対応した基本的なシーン管理
 - Wavefront OBJ の頂点・UV 座標・法線・面データ読み込み。多角形の三角形分割と各属性の負のインデックスに対応
 - Q/E キーによる上下移動、Shift キーによる高速移動
@@ -172,7 +172,7 @@ Gasoline Engine は、C++20 を基盤として開発しているクロスプラ�
 
 ## 衝突判定（試作）
 
-衝突判定モジュールは、静的な軸平行境界ボックス（AABB）に対応しています。カメラの移動を X・Y・Z 軸ごとに解決することで、ボックス内部への侵入を防ぎ、面に沿って滑るように移動できます。回転したメッシュとの衝突、斜面、階段昇降、カプセル形状を使った本格的なキャラクターコントローラーは未実装です。
+衝突判定モジュールは、静的な軸平行境界ボックス（AABB）に対応しています。カメラの移動を X・Y・Z 軸ごとに解決し、各軸の移動量を最初の接触位置で止めます。移動量が大きく、障害物を完全に通り抜ける位置まで進もうとした場合も、手前で停止します。衝突していない軸の移動は続けられるため、壁に沿った移動も可能です。回転したメッシュとの衝突、斜面、階段昇降、カプセル形状を使った本格的なキャラクターコントローラーは未実装です。
 
 ## 必要なもの
 

@@ -120,8 +120,8 @@ GitHubには少なくとも次のブランチが存在する。
 
 ### 衝突判定
 - 静的AABB（軸平行境界ボックス）。
-- X/Y/Z軸ごとに移動を解決。
-- 障害物への侵入を防ぎ、面に沿ってスライド。
+- X/Y/Z軸ごとに移動を解決し、各軸の移動量を最初のAABB接触位置で止める。
+- 移動量が大きく障害物を完全に通り抜ける場合も手前で停止し、衝突していない軸では壁沿いの移動を許可する。
 - 回転メッシュ、斜面、階段、カプセルコントローラーは未実装。
 
 ## 4. GPUバックエンドの正確な状態
@@ -487,3 +487,12 @@ CI:
 - The repository is public and the workflow uses a standard GitHub-hosted runner. GitHub documents standard hosted runners as free for public repositories.
 - This automation is deterministic CI, **not an AI coding agent**. It does not call an LLM/API, invent fixes, change source files, or semantically update documentation. Fixes and documentation changes remain part of the normal development process.
 - The workflow has not yet been manually dispatched or verified by a completed run at the time of this entry. Do not report the schedule as tested until a run completes.
+
+
+## AABB axis movement collision fix — 2026-11-01
+
+- Updated `CollisionWorld::resolveAxis` to clamp axis movement to the nearest AABB contact boundary instead of checking only the final position.
+- This prevents a large positive or negative displacement from crossing an entire obstacle without an endpoint overlap.
+- Movement parallel to a wall remains available, and movement out of an existing overlap is not blocked.
+- Added regression tests for first-contact stopping, positive/negative tunneling, escape from an existing overlap, wall sliding, and invalid axis input.
+- Build and CI results for this change must be verified against the commit that contains it; this entry does not imply a passing build or physical-device test.
