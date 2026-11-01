@@ -507,13 +507,30 @@ int main(int argc, char* argv[]) {
                 if (gpuRenderer == nullptr || !gpuRenderer->renderFrame(
                         camera, gpuSceneObjects, !smokeTest, hasMovementFinger,
                         movementX, movementY, smoothedFps)) {
-                    writeDiagnostic(std::string("GPU mesh frame failed: ") +
-                        (gpuRenderer != nullptr ? gpuRenderer->lastError() : "renderer unavailable"));
-                    exitCode = 1;
-                    break;
+                    const std::string gpuFailure = gpuRenderer != nullptr
+                        ? gpuRenderer->lastError() : "renderer unavailable";
+                    writeDiagnostic("GPU mesh frame failed: " + gpuFailure);
+
+                    // GpuRenderer releases its window claim during destruction,
+                    // allowing SDL_Renderer to take ownership again.
+                    gpuRenderer.reset();
+                    gpuMode = false;
+                    renderer = SDL_CreateRenderer(window, nullptr);
+                    if (renderer == nullptr) {
+                        logSdlError("SDL_CreateRenderer after GPU frame failure");
+                        exitCode = 1;
+                        break;
+                    }
+                    (void)SDL_SetRenderVSync(renderer, 1);
+                    renderer3D = std::make_unique<originalengine::Renderer3D>(renderer);
+                    SDL_SetWindowTitle(window, "Gasoline Engine | G: switch to GPU");
+                    writeDiagnostic("GPU frame failed; CPU renderer restored");
+                } else {
+                    continue;
                 }
-                continue;
             }
+
+            if (exitCode != 0) break;
 
             int width = 0;
             int height = 0;
