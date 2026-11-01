@@ -72,8 +72,18 @@ int main() {
         return 1;
     }
 
-    std::istringstream invalid("v 0 0 0\nf 1 2 3\n");
     originalengine::Mesh preserved = mesh;
+    std::istringstream malformedTrailingSlash(
+        "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1/ 2/ 3/\n");
+    if (originalengine::ObjMeshLoader::loadFromStream(malformedTrailingSlash, mesh, &error) ||
+        mesh.vertices.size() != preserved.vertices.size() ||
+        mesh.triangles.size() != preserved.triangles.size()) {
+        std::cerr << "OBJ face vertices with a trailing slash but no UV index must be rejected "
+                     "without replacing the output mesh.\n";
+        return 1;
+    }
+
+    std::istringstream invalid("v 0 0 0\nf 1 2 3\n");
     if (originalengine::ObjMeshLoader::loadFromStream(invalid, mesh, &error) ||
         mesh.vertices.size() != preserved.vertices.size() ||
         mesh.triangles.size() != preserved.triangles.size()) {

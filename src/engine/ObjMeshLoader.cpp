@@ -72,6 +72,12 @@ bool parseFaceVertex(const std::string& token, std::size_t positionCount,
     const std::string texText = token.substr(
         firstSlash + 1,
         (secondSlash == std::string::npos ? token.size() : secondSlash) - firstSlash - 1);
+    if (secondSlash == std::string::npos && texText.empty()) {
+        // A trailing slash without a texture-coordinate index is not a valid
+        // OBJ face-vertex form (for example, "1/").
+        return false;
+    }
+
     if (!texText.empty()) {
         long long texIndex = 0;
         if (!parseInteger(texText, texIndex) ||

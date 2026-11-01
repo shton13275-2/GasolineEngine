@@ -197,8 +197,7 @@ GitHubには少なくとも次のブランチが存在する。
 | Path | 役割 |
 |---|---|
 | `CMakeLists.txt` | C++20、SDL3 FetchContent、Windows/iOSターゲット、テスト |
-| `src/main.cpp` | デモアプリ、入力、iOSタッチ、GPU/CPU切替、CPU fallback |
-| `include/engine/Camera.hpp` / `src/engine/Camera.cpp` | カメラ |
+| `src/main.cpp` | デモアプリ、入力、iOSタッチ、GPU/CPU切替、CPU fallback || `include/engine/Camera.hpp` / `src/engine/Camera.cpp` | カメラ |
 | `include/engine/CollisionWorld.hpp` / `src/engine/CollisionWorld.cpp` | AABB衝突 |
 | `include/engine/Scene.hpp` / `src/engine/Scene.cpp` | シーンとTransform |
 | `include/engine/Mesh.hpp` | MeshVertex/MeshTriangle/Mesh |
@@ -397,7 +396,6 @@ CI:
 - SDL_shadercross: https://github.com/libsdl-org/SDL_shadercross
 - SDL GPU examples: https://github.com/TheSpydog/SDL_gpu_examples
 - GitHub README guidance: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-readmes
-
 ---
 
 ## 追記履歴
@@ -513,3 +511,10 @@ CI:
 - Added a dedicated per-vertex UV-presence attribute and use it to select the untextured fallback. UV numeric values are no longer overloaded as a presence sentinel.
 - Extended the OBJ loader regression fixture to include negative U/V values and assert they are preserved.
 - The CI build can compile the C++ integration and run the OBJ parser regression test. The repository CI does not compile the embedded MSL shader or verify Metal sampling on a physical iPhone; that runtime behavior remains to be checked on device.
+
+## OBJ face-token validation fix — 2026-11-01
+
+- Fixed `ObjMeshLoader` accepting malformed face-vertex tokens with a trailing slash and no texture-coordinate index (for example, `1/`).
+- Added a regression test confirming that such input is rejected and that a previously loaded output mesh remains unchanged.
+- Updated the root README to document the stricter face-token validation.
+- The source and test changes were reviewed, but no local compiler/test environment was run for this edit. The matching GitHub Actions run must be checked before treating the fix as build-verified.
