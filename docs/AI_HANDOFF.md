@@ -520,3 +520,9 @@ CI:
 - Added a regression test confirming that such input is rejected and that a previously loaded output mesh remains unchanged.
 - Updated the root README to document the stricter face-token validation.
 - The source and test changes were reviewed, but no local compiler/test environment was run for this edit. The matching GitHub Actions run must be checked before treating the fix as build-verified.
+
+## Metal fragment input interface fix — 2026-11-01
+
+- Fixed a confirmed interface mismatch in the embedded Metal shaders: the vertex stage wrote the `hasTexCoord` varying, and the fragment stage read `input.hasTexCoord`, but the fragment input structure did not declare that member.
+- Added `float hasTexCoord;` to the fragment-stage input structure so the varying is declared at both shader stages.
+- Updated the root README to record the fix. Physical-device Metal shader compilation and rendering still require verification on an iPhone or iPad; the regular CI build does not establish that runtime result.
