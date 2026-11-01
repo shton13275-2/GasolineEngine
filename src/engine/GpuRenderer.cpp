@@ -85,6 +85,7 @@ struct VertexOutput {
     float3 normal;
     float3 color;
     float2 uv;
+    float hasTexCoord;
     float3 viewDirection;
 };
 
