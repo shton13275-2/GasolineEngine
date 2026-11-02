@@ -122,6 +122,29 @@ struct OverlayConstants {
     Uint32 padding;
 };
 
+constexpr char glowFragmentSource[] = R"metal(
+#include <metal_stdlib>
+using namespace metal;
+
+struct VertexOutput {
+    float4 position [[position]];
+    float3 normal;
+    float3 color;
+    float2 uv;
+    float hasTexCoord;
+    float3 viewDirection;
+};
+
+fragment float4 glow_fragment(VertexOutput input [[stage_in]])
+{
+    const float3 normal = normalize(input.normal);
+    const float3 viewDirection = normalize(input.viewDirection);
+    const float rim = 1.0 - max(dot(normal, viewDirection), 0.0);
+    const float alpha = smoothstep(0.12, 0.85, rim) * 0.52;
+    return float4(0.02, 0.72, 1.0, alpha);
+}
+)metal";
+
 constexpr char overlayVertexSource[] = R"metal(
 #include <metal_stdlib>
 using namespace metal;
@@ -799,6 +822,53 @@ bool GpuRenderer::initialize(SDL_Window* window, const std::vector<const Mesh*>&
         return false;
     }
 
+    SDL_GPUShaderCreateInfo glowVertexInfo{};
+    glowVertexInfo.code_size = std::strlen(vertexSource);
+    glowVertexInfo.code = reinterpret_cast<const Uint8*>(vertexSource);
+    glowVertexInfo.entrypoint = "main_vertex";
+    glowVertexInfo.format = SDL_GPU_SHADERFORMAT_MSL;
+    glowVertexInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
+    glowVertexInfo.num_uniform_buffers = 1;
+    SDL_GPUShader* glowVertexShader = SDL_CreateGPUShader(device_, &glowVertexInfo);
+    SDL_GPUShaderCreateInfo glowFragmentInfo{};
+    glowFragmentInfo.code_size = std::strlen(glowFragmentSource);
+    glowFragmentInfo.code = reinterpret_cast<const Uint8*>(glowFragmentSource);
+    glowFragmentInfo.entrypoint = "glow_fragment";
+    glowFragmentInfo.format = SDL_GPU_SHADERFORMAT_MSL;
+    glowFragmentInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
+    SDL_GPUShader* glowFragmentShader = SDL_CreateGPUShader(device_, &glowFragmentInfo);
+    if (glowVertexShader == nullptr || glowFragmentShader == nullptr) {
+        if (glowVertexShader != nullptr) SDL_ReleaseGPUShader(device_, glowVertexShader);
+        if (glowFragmentShader != nullptr) SDL_ReleaseGPUShader(device_, glowFragmentShader);
+        setError("SDL_CreateGPUShader(glow)");
+        shutdown();
+        return false;
+    }
+    SDL_GPUColorTargetDescription glowColorTarget{};
+    glowColorTarget.format = SDL_GetGPUSwapchainTextureFormat(device_, window_);
+    glowColorTarget.blend_state.enable_blend = true;
+    glowColorTarget.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+    glowColorTarget.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+    glowColorTarget.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
+    glowColorTarget.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+    glowColorTarget.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+    glowColorTarget.blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+    SDL_GPUGraphicsPipelineCreateInfo glowPipelineInfo = pipelineInfo;
+    glowPipelineInfo.vertex_shader = glowVertexShader;
+    glowPipelineInfo.fragment_shader = glowFragmentShader;
+    glowPipelineInfo.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
+    glowPipelineInfo.depth_stencil_state.enable_depth_test = false;
+    glowPipelineInfo.depth_stencil_state.enable_depth_write = false;
+    glowPipelineInfo.target_info.color_target_descriptions = &glowColorTarget;
+    glowPipeline_ = SDL_CreateGPUGraphicsPipeline(device_, &glowPipelineInfo);
+    SDL_ReleaseGPUShader(device_, glowFragmentShader);
+    SDL_ReleaseGPUShader(device_, glowVertexShader);
+    if (glowPipeline_ == nullptr) {
+        setError("SDL_CreateGPUGraphicsPipeline(glow)");
+        shutdown();
+        return false;
+    }
+
     SDL_GPUShaderCreateInfo overlayVertexInfo{};
     overlayVertexInfo.code_size = std::strlen(overlayVertexSource);
     overlayVertexInfo.code = reinterpret_cast<const Uint8*>(overlayVertexSource);
@@ -994,6 +1064,35 @@ bool GpuRenderer::renderFrame(
         static_cast<float>(width) / static_cast<float>(height));
     const Matrix4 viewProjection = multiply(projection, view);
 
+    if (!wireframe && glowPipeline_ != nullptr) {
+        SDL_BindGPUGraphicsPipeline(pass, glowPipeline_);
+        for (const GpuMeshInstance& instance : instances) {
+            if (instance.object == nullptr || !instance.object->visible ||
+                instance.meshIndex != 1U) {
+                continue;
+            }
+            Transform glowTransform = instance.object->transform;
+            glowTransform.scale.x *= 1.16F;
+            glowTransform.scale.y *= 1.16F;
+            glowTransform.scale.z *= 1.16F;
+            const Matrix4 glowModel = modelMatrix(glowTransform);
+            ObjectConstants glowConstants{};
+            glowConstants.model = glowModel;
+            glowConstants.mvp = multiply(viewProjection, glowModel);
+            glowConstants.normalMatrix = normalMatrix(glowTransform);
+            glowConstants.cameraPosition[0] = camera.x();
+            glowConstants.cameraPosition[1] = camera.y();
+            glowConstants.cameraPosition[2] = camera.z();
+            glowConstants.cameraPosition[3] = 1.0F;
+            SDL_PushGPUVertexUniformData(commandBuffer, 0, &glowConstants,
+                                         static_cast<Uint32>(sizeof(glowConstants)));
+            const MeshRange& glowRange = meshRanges_[instance.meshIndex];
+            SDL_DrawGPUIndexedPrimitives(pass, glowRange.indexCount, 1,
+                                         glowRange.firstIndex, 0, 0);
+        }
+    }
+
+    SDL_BindGPUGraphicsPipeline(pass, wireframe ? wireframePipeline_ : pipeline_);
     for (const GpuMeshInstance& instance : instances) {
         const SceneObject* object = instance.object;
         if (object == nullptr || !object->visible || instance.meshIndex >= meshRanges_.size()) {
@@ -1177,6 +1276,10 @@ void GpuRenderer::shutdown() noexcept {
         }
         depthWidth_ = 0;
         depthHeight_ = 0;
+        if (glowPipeline_ != nullptr) {
+            SDL_ReleaseGPUGraphicsPipeline(device_, glowPipeline_);
+            glowPipeline_ = nullptr;
+        }
         if (overlayPipeline_ != nullptr) {
             SDL_ReleaseGPUGraphicsPipeline(device_, overlayPipeline_);
             overlayPipeline_ = nullptr;
