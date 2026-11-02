@@ -330,8 +330,10 @@ Matrix4 viewMatrix(const Camera& camera) {
 Matrix4 projectionMatrix(float aspectRatio) {
     constexpr float nearPlane = 0.1F;
     constexpr float farPlane = 100.0F;
-    constexpr float verticalFov = 1.0471975512F;
-    const float focalLength = 1.0F / std::tan(verticalFov * 0.5F);
+    // Match Renderer3D's CPU projection: min(width, height) * 0.42 * 2.4.
+    // SDL_GPU uses normalized device coordinates, so this is the equivalent
+    // vertical focal length for the same screen-space cube size.
+    constexpr float focalLength = 2.016F;
 
     Matrix4 result{};
     result[0] = focalLength / std::max(aspectRatio, 0.001F);

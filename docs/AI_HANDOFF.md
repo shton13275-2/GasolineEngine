@@ -603,3 +603,5 @@ CI:
 - `makeDemoCubeTransform` を追加し、CPU/GPU双方が同じ経過時間から同じTransformを取得する。
 - primitive_meshesテストで初期位置・スケール・初期回転とt=1の回転式を検証。
 - 実機での見た目確認は未実施。CI結果は作業後に追記。
+
+- GPU投影の垂直焦点係数もCPUの `min(width,height) * 0.42 * 2.4` と一致する `2.016` に統一。以前のGPU 60度FOVではCPU表示より小さく見える差が残っていた。
