@@ -546,7 +546,7 @@ int main(int argc, char* argv[]) {
                         if (gpuRenderer == nullptr) return false;
                         const bool rendered = gpuRenderer->renderFrame(
                             camera, gpuSceneObjects, !smokeTest, backendSwitchInput.hasMovementFinger,
-                            backendSwitchInput.movementX, backendSwitchInput.movementY, smoothedFps);
+                            backendSwitchInput.movementX, backendSwitchInput.movementY, smoothedFps, wireframe);
                         if (!rendered) gpuFailure = gpuRenderer->lastError();
                         return rendered;
                     },
