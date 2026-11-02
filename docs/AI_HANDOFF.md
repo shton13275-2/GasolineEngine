@@ -634,13 +634,23 @@ CI:
 - The GPU clear color is a matching dark blue/cyan tone. Actual Metal appearance and performance remain unverified until tested on a physical iPhone.
 
 
-## GPU cube glow update
+## GPU cube glow update — superseded
 
-A dedicated GPU glow pipeline is used for the rotating cube. It draws the same cube mesh at 1.16x scale after the opaque scene pass, with front-face culling, depth testing, depth writes disabled, additive cyan blending, and a narrow low-alpha rim contribution. The opaque cube depth hides the expanded shell across the cube interior, leaving the outer silhouette rim. This is a silhouette glow approximation, not blur-based bloom. Wireframe mode skips the glow pass. The pipeline is released during GpuRenderer shutdown. Physical iPhone/Metal appearance remains unverified.
+The earlier implementation drew an expanded cube shell at 1.16x scale with front-face culling and additive blending. It produced an unwanted glass-like silhouette and has been removed by the emissive point-lighting update below.
 
 
 ## Floor/cube color separation
 
 - CPU: the untextured floor mesh uses a dark blue material; the cyan floor grid is also darker and less saturated than the cube.
-- GPU: a per-instance material flag identifies the floor mesh and selects a dark blue-teal tint with reduced emission/specular. The cube keeps its bright cyan tint and glow. Material selection is explicit by mesh instance index, not based on normal direction, so cube top/bottom faces are not treated as floor.
+- GPU: a per-instance material flag identifies the floor mesh and selects a dark blue-teal tint with reduced emission/specular. The cube keeps its bright cyan emissive material and acts as a point light. Material selection is explicit by mesh instance index, not based on normal direction, so cube top/bottom faces are not treated as floor.
 - Visual appearance remains unverified on physical iPhone hardware.
+
+
+## GPU emissive point lighting — 2026-11-02
+
+- Removed the expanded 1.16x cube shell and its dedicated glow pipeline. The shell was a silhouette effect and did not create illumination on nearby surfaces.
+- The rotating cube now uses a uniformly emissive cyan surface and supplies its animated world position as a point-light position to the mesh shader.
+- The fragment shader calculates point-light distance attenuation, diffuse response, and specular response for rendered surfaces. The floor therefore receives cyan illumination according to its distance and normal relative to the cube.
+- The point-light data is passed through vertex-stage uniforms and interpolated varyings to the fragment stage; no additional fragment uniform binding is required.
+- This is a real-time local-light approximation, not ray tracing. It does not trace reflections or multiple light bounces. A screen-space bloom/blur post-process is still not implemented.
+- The embedded MSL shader is not compiled by the normal C++ CI build. The matching GitHub Actions run must verify C++ compilation/tests and iOS packaging; actual Metal shader compilation, lighting appearance, and performance still require a physical iPhone test.
