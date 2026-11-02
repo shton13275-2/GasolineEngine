@@ -154,10 +154,7 @@ fragment float4 main_fragment(
         input.pointLightColorIntensity.w * attenuation *
         (albedo * pointDiffuse * 1.8 + pointSpecular);
 
-    const float3 emission = floorSurface
-        ? albedo * 0.035
-        : albedo * 1.15 + float3(0.02, 0.24, 0.34) *
-            pow(1.0 - max(dot(normal, normalize(input.viewDirection)), 0.0), 2.0);
+    const float3 emission = floorSurface ? albedo * 0.035 : albedo * 1.35;
     const float ambientStrength = floorSurface ? 0.16 : 0.24;
     const float directionalStrength = floorSurface ? 0.16 : 0.30;
     const float3 lighting = albedo * (ambientStrength + directionalDiffuse * directionalStrength) +
