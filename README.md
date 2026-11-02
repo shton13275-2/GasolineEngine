@@ -250,3 +250,7 @@ When the GPU backend is active, it renders a dedicated six-face cube mesh with p
 ### GPU multisample anti-aliasing
 
 The experimental SDL_GPU renderer checks runtime format and sample-count support for 4x MSAA on both its color and depth targets. When supported, the 3D scene and GPU overlay render into a multisample color target that resolves to the swapchain. Devices that do not support the required 4x formats retain the single-sample rendering path. Actual Metal rendering, edge quality, and performance must still be checked on a physical iPhone.
+
+## Cyan scene lighting
+
+The CPU and experimental GPU renderers share a dark cyan sky, a cyan floor surface, and a bright cyan rotating cube. The CPU renderer overlays its existing depth-tested cyan floor grid; the GPU renderer draws the shared floor plane as scene geometry. The GPU mesh fragment shader adds an emissive cyan contribution and a view-angle rim highlight. This is an emissive shader treatment, not a full-screen bloom post-process. Physical iPhone appearance and performance still require device testing.
