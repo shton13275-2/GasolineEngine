@@ -909,7 +909,7 @@ bool Renderer3D::render(int width, int height, double elapsedSeconds,
     }
 
     if (!wireframe) {
-        const SDL_Color gridColor{35, 190, 235, 255};
+        const SDL_Color gridColor{28, 105, 155, 255};
         for (const GridLine& line : gridLines) {
             rasterizeDepthLine(width, height, line.a, line.depthA,
                                line.b, line.depthB, gridColor,
