@@ -574,6 +574,15 @@ bool GpuRenderer::initialize(SDL_Window* window, const std::vector<const Mesh*>&
         return false;
     }
 
+    const SDL_GPUTextureFormat swapchainFormat = SDL_GetGPUSwapchainTextureFormat(device_, window_);
+    sampleCount_ = SDL_GPU_SAMPLECOUNT_1;
+    if (SDL_GPUTextureSupportsFormat(device_, swapchainFormat, SDL_GPU_TEXTURETYPE_2D,
+            SDL_GPU_TEXTUREUSAGE_COLOR_TARGET) &&
+        SDL_GPUTextureSupportsSampleCount(device_, swapchainFormat, SDL_GPU_SAMPLECOUNT_4) &&
+        SDL_GPUTextureSupportsSampleCount(device_, depthFormat_, SDL_GPU_SAMPLECOUNT_4)) {
+        sampleCount_ = SDL_GPU_SAMPLECOUNT_4;
+    }
+
     SDL_GPUBufferCreateInfo vertexBufferInfo{};
     vertexBufferInfo.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
     vertexBufferInfo.size = static_cast<Uint32>(vertices.size() * sizeof(GpuVertex));
@@ -764,7 +773,7 @@ bool GpuRenderer::initialize(SDL_Window* window, const std::vector<const Mesh*>&
     pipelineInfo.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
     pipelineInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
     pipelineInfo.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
-    pipelineInfo.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_1;
+    pipelineInfo.multisample_state.sample_count = sampleCount_;
     pipelineInfo.depth_stencil_state.enable_depth_test = true;
     pipelineInfo.depth_stencil_state.enable_depth_write = true;
     pipelineInfo.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_LESS_OR_EQUAL;
@@ -830,7 +839,7 @@ bool GpuRenderer::initialize(SDL_Window* window, const std::vector<const Mesh*>&
     overlayPipelineInfo.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
     overlayPipelineInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
     overlayPipelineInfo.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
-    overlayPipelineInfo.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_1;
+    overlayPipelineInfo.multisample_state.sample_count = sampleCount_;
     overlayPipelineInfo.depth_stencil_state.enable_depth_test = false;
     overlayPipelineInfo.depth_stencil_state.enable_depth_write = false;
     overlayPipelineInfo.target_info.color_target_descriptions = &overlayColorTarget;
@@ -849,12 +858,17 @@ bool GpuRenderer::initialize(SDL_Window* window, const std::vector<const Mesh*>&
 }
 
 bool GpuRenderer::createDepthTexture(Uint32 width, Uint32 height) {
-    if (depthTexture_ != nullptr && depthWidth_ == width && depthHeight_ == height) {
+    if (depthTexture_ != nullptr && depthWidth_ == width && depthHeight_ == height &&
+        (sampleCount_ == SDL_GPU_SAMPLECOUNT_1 || multisampleColorTexture_ != nullptr)) {
         return true;
     }
     if (depthTexture_ != nullptr) {
         SDL_ReleaseGPUTexture(device_, depthTexture_);
         depthTexture_ = nullptr;
+    }
+    if (multisampleColorTexture_ != nullptr) {
+        SDL_ReleaseGPUTexture(device_, multisampleColorTexture_);
+        multisampleColorTexture_ = nullptr;
     }
 
     SDL_GPUTextureCreateInfo textureInfo{};
@@ -865,13 +879,34 @@ bool GpuRenderer::createDepthTexture(Uint32 width, Uint32 height) {
     textureInfo.height = height;
     textureInfo.layer_count_or_depth = 1;
     textureInfo.num_levels = 1;
-    textureInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
+    textureInfo.sample_count = sampleCount_;
     depthTexture_ = SDL_CreateGPUTexture(device_, &textureInfo);
     if (depthTexture_ == nullptr) {
         depthWidth_ = 0;
         depthHeight_ = 0;
         setError("SDL_CreateGPUTexture(depth)");
         return false;
+    }
+
+    if (sampleCount_ != SDL_GPU_SAMPLECOUNT_1) {
+        SDL_GPUTextureCreateInfo colorInfo{};
+        colorInfo.type = SDL_GPU_TEXTURETYPE_2D;
+        colorInfo.format = SDL_GetGPUSwapchainTextureFormat(device_, window_);
+        colorInfo.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET;
+        colorInfo.width = width;
+        colorInfo.height = height;
+        colorInfo.layer_count_or_depth = 1;
+        colorInfo.num_levels = 1;
+        colorInfo.sample_count = sampleCount_;
+        multisampleColorTexture_ = SDL_CreateGPUTexture(device_, &colorInfo);
+        if (multisampleColorTexture_ == nullptr) {
+            SDL_ReleaseGPUTexture(device_, depthTexture_);
+            depthTexture_ = nullptr;
+            depthWidth_ = 0;
+            depthHeight_ = 0;
+            setError("SDL_CreateGPUTexture(multisample color)");
+            return false;
+        }
     }
     depthWidth_ = width;
     depthHeight_ = height;
@@ -917,10 +952,14 @@ bool GpuRenderer::renderFrame(
     }
 
     SDL_GPUColorTargetInfo colorTarget{};
-    colorTarget.texture = swapchainTexture;
+    colorTarget.texture = sampleCount_ == SDL_GPU_SAMPLECOUNT_1
+        ? swapchainTexture : multisampleColorTexture_;
     colorTarget.clear_color = SDL_FColor{0.025F, 0.12F, 0.19F, 1.0F};
     colorTarget.load_op = SDL_GPU_LOADOP_CLEAR;
-    colorTarget.store_op = SDL_GPU_STOREOP_STORE;
+    colorTarget.store_op = sampleCount_ == SDL_GPU_SAMPLECOUNT_1
+        ? SDL_GPU_STOREOP_STORE : SDL_GPU_STOREOP_RESOLVE;
+    colorTarget.resolve_texture = sampleCount_ == SDL_GPU_SAMPLECOUNT_1
+        ? nullptr : swapchainTexture;
 
     SDL_GPUDepthStencilTargetInfo depthTarget{};
     depthTarget.texture = depthTexture_;
@@ -1120,6 +1159,10 @@ void GpuRenderer::shutdown() noexcept {
             SDL_ReleaseGPUTexture(device_, depthTexture_);
             depthTexture_ = nullptr;
         }
+        if (multisampleColorTexture_ != nullptr) {
+            SDL_ReleaseGPUTexture(device_, multisampleColorTexture_);
+            multisampleColorTexture_ = nullptr;
+        }
         if (colorSampler_ != nullptr) {
             SDL_ReleaseGPUSampler(device_, colorSampler_);
             colorSampler_ = nullptr;
@@ -1158,6 +1201,7 @@ void GpuRenderer::shutdown() noexcept {
         device_ = nullptr;
     }
     depthFormat_ = SDL_GPU_TEXTUREFORMAT_INVALID;
+    sampleCount_ = SDL_GPU_SAMPLECOUNT_1;
     meshRanges_.clear();
 }
 
