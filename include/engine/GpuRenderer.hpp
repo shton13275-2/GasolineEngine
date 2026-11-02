@@ -66,11 +66,13 @@ private:
     SDL_GPUBuffer* vertexBuffer_{nullptr};
     SDL_GPUBuffer* indexBuffer_{nullptr};
     SDL_GPUTexture* depthTexture_{nullptr};
+    SDL_GPUTexture* multisampleColorTexture_{nullptr};
     SDL_GPUTexture* colorTexture_{nullptr};
     SDL_GPUSampler* colorSampler_{nullptr};
     SDL_GPUTextureFormat depthFormat_{SDL_GPU_TEXTUREFORMAT_INVALID};
     Uint32 depthWidth_{0};
     Uint32 depthHeight_{0};
+    SDL_GPUSampleCount sampleCount_{SDL_GPU_SAMPLECOUNT_1};
     struct MeshRange {
         Uint32 firstIndex{0};
         Uint32 indexCount{0};
