@@ -774,9 +774,13 @@ bool GpuRenderer::initialize(SDL_Window* window, const std::vector<const Mesh*>&
     pipelineInfo.target_info.depth_stencil_format = depthFormat_;
 
     pipeline_ = SDL_CreateGPUGraphicsPipeline(device_, &pipelineInfo);
+    if (pipeline_ != nullptr) {
+        pipelineInfo.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_LINE;
+        wireframePipeline_ = SDL_CreateGPUGraphicsPipeline(device_, &pipelineInfo);
+    }
     SDL_ReleaseGPUShader(device_, fragmentShader);
     SDL_ReleaseGPUShader(device_, vertexShader);
-    if (pipeline_ == nullptr) {
+    if (pipeline_ == nullptr || wireframePipeline_ == nullptr) {
         setError("SDL_CreateGPUGraphicsPipeline");
         shutdown();
         return false;
@@ -877,8 +881,9 @@ bool GpuRenderer::createDepthTexture(Uint32 width, Uint32 height) {
 bool GpuRenderer::renderFrame(
     const Camera& camera, const std::vector<GpuMeshInstance>& instances,
     bool showTouchControls, bool movementActive, float movementX, float movementY,
-    float framesPerSecond) {
+    float framesPerSecond, bool wireframe) {
     if (device_ == nullptr || window_ == nullptr || pipeline_ == nullptr ||
+        wireframePipeline_ == nullptr ||
         vertexBuffer_ == nullptr || indexBuffer_ == nullptr || meshRanges_.empty()) {
         lastError_ = "GPU renderer is not initialized";
         return false;
@@ -933,7 +938,7 @@ bool GpuRenderer::renderFrame(
         return false;
     }
 
-    SDL_BindGPUGraphicsPipeline(pass, pipeline_);
+    SDL_BindGPUGraphicsPipeline(pass, wireframe ? wireframePipeline_ : pipeline_);
     const SDL_GPUBufferBinding vertexBinding{vertexBuffer_, 0};
     SDL_BindGPUVertexBuffers(pass, 0, &vertexBinding, 1);
     const SDL_GPUBufferBinding indexBinding{indexBuffer_, 0};
@@ -1128,6 +1133,10 @@ void GpuRenderer::shutdown() noexcept {
         if (overlayPipeline_ != nullptr) {
             SDL_ReleaseGPUGraphicsPipeline(device_, overlayPipeline_);
             overlayPipeline_ = nullptr;
+        }
+        if (wireframePipeline_ != nullptr) {
+            SDL_ReleaseGPUGraphicsPipeline(device_, wireframePipeline_);
+            wireframePipeline_ = nullptr;
         }
         if (pipeline_ != nullptr) {
             SDL_ReleaseGPUGraphicsPipeline(device_, pipeline_);
