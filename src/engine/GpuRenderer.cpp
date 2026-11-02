@@ -174,6 +174,62 @@ struct OverlayConstants {
 };
 
 
+constexpr char bloomVertexSource[] = R"metal(
+#include <metal_stdlib>
+using namespace metal;
+struct BloomVertexOutput {
+    float4 position [[position]];
+    float2 uv;
+};
+vertex BloomVertexOutput bloom_vertex(uint vertexId [[vertex_id]])
+{
+    const float2 positions[3] = {
+        float2(-1.0, -1.0), float2(3.0, -1.0), float2(-1.0, 3.0)
+    };
+    BloomVertexOutput output;
+    const float2 position = positions[vertexId];
+    output.position = float4(position, 0.0, 1.0);
+    output.uv = float2(position.x * 0.5 + 0.5, 0.5 - position.y * 0.5);
+    return output;
+}
+)metal";
+
+constexpr char bloomFragmentSource[] = R"metal(
+#include <metal_stdlib>
+using namespace metal;
+struct BloomVertexOutput {
+    float4 position [[position]];
+    float2 uv;
+};
+fragment float4 bloom_fragment(
+    BloomVertexOutput input [[stage_in]],
+    texture2d<float> sceneTexture [[texture(0)]],
+    sampler sceneSampler [[sampler(0)]])
+{
+    const float2 texel = 1.0 / float2(sceneTexture.get_width(), sceneTexture.get_height());
+    const float2 offsets[9] = {
+        float2(0.0, 0.0),
+        float2(1.5, 0.0), float2(-1.5, 0.0),
+        float2(0.0, 1.5), float2(0.0, -1.5),
+        float2(3.0, 0.0), float2(-3.0, 0.0),
+        float2(0.0, 3.0), float2(0.0, -3.0)
+    };
+    const float weights[9] = {
+        0.20, 0.12, 0.12, 0.12, 0.12, 0.05, 0.05, 0.05, 0.05
+    };
+    const float3 base = sceneTexture.sample(sceneSampler, input.uv).rgb;
+    float3 glow = float3(0.0);
+    for (uint index = 0; index < 9; ++index) {
+        const float3 sampleColor = sceneTexture.sample(
+            sceneSampler, input.uv + offsets[index] * texel).rgb;
+        const float brightness = max(sampleColor.r, max(sampleColor.g, sampleColor.b));
+        const float threshold = smoothstep(0.62, 1.05, brightness);
+        glow += sampleColor * threshold * weights[index];
+    }
+    return float4(base + glow * 1.25, 1.0);
+}
+)metal";
+
 constexpr char overlayVertexSource[] = R"metal(
 #include <metal_stdlib>
 using namespace metal;
