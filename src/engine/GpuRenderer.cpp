@@ -32,6 +32,8 @@ struct ObjectConstants {
     Matrix4 normalMatrix{};
     float cameraPosition[4]{};
     float materialFlags[4]{};
+    float pointLightPositionRange[4]{};
+    float pointLightColorIntensity[4]{};
 };
 
 constexpr char vertexSource[] = R"metal(
@@ -53,6 +55,7 @@ struct VertexOutput {
     float2 uv;
     float hasTexCoord;
     float3 viewDirection;
+    float3 worldPosition;
     float isFloor;
 };
 
@@ -62,6 +65,8 @@ struct CameraConstants {
     float4x4 normalMatrix;
     float4 cameraPosition;
     float4 materialFlags;
+    float4 pointLightPositionRange;
+    float4 pointLightColorIntensity;
 };
 
 vertex VertexOutput main_vertex(
@@ -76,6 +81,7 @@ vertex VertexOutput main_vertex(
     output.uv = input.uv;
     output.hasTexCoord = input.hasTexCoord;
     output.viewDirection = normalize(camera.cameraPosition.xyz - worldPosition.xyz);
+    output.worldPosition = worldPosition.xyz;
     output.isFloor = camera.materialFlags.x;
     return output;
 }
@@ -92,11 +98,23 @@ struct VertexOutput {
     float2 uv;
     float hasTexCoord;
     float3 viewDirection;
+    float3 worldPosition;
     float isFloor;
+};
+
+struct CameraConstants {
+    float4x4 mvp;
+    float4x4 model;
+    float4x4 normalMatrix;
+    float4 cameraPosition;
+    float4 materialFlags;
+    float4 pointLightPositionRange;
+    float4 pointLightColorIntensity;
 };
 
 fragment float4 main_fragment(
     VertexOutput input [[stage_in]],
+    constant CameraConstants& camera [[buffer(0)]],
     texture2d<float> baseColorTexture [[texture(0)]],
     sampler baseColorSampler [[sampler(0)]])
 {
@@ -109,17 +127,36 @@ fragment float4 main_fragment(
         ? float3(0.025, 0.20, 0.32)
         : float3(0.12, 0.78, 1.0);
     const float3 albedo = sampledColor * cyanTint;
-    const float3 lightDirection = normalize(float3(-0.35, 0.8, -0.45));
-    const float diffuse = max(dot(normal, lightDirection), 0.0);
-    const float3 halfVector = normalize(lightDirection + normalize(input.viewDirection));
-    const float specular = pow(max(dot(normal, halfVector), 0.0), 32.0) *
-        (floorSurface ? 0.08 : 0.35);
-    const float rim = pow(1.0 - max(dot(normal, normalize(input.viewDirection)), 0.0), 2.0);
+    const float3 directionalLight = normalize(float3(-0.35, 0.8, -0.45));
+    const float directionalDiffuse = max(dot(normal, directionalLight), 0.0);
+    const float3 directionalHalf = normalize(directionalLight + normalize(input.viewDirection));
+    const float directionalSpecular = pow(
+        max(dot(normal, directionalHalf), 0.0), 32.0) * (floorSurface ? 0.04 : 0.16);
+
+    const float3 toPointLight = camera.pointLightPositionRange.xyz - input.worldPosition;
+    const float lightDistance = length(toPointLight);
+    const float3 pointDirection = lightDistance > 0.0001
+        ? toPointLight / lightDistance : normal;
+    const float lightRange = max(camera.pointLightPositionRange.w, 0.001);
+    const float rangeFade = max(1.0 - lightDistance / lightRange, 0.0);
+    const float attenuation = rangeFade * rangeFade /
+        (1.0 + 0.18 * lightDistance * lightDistance);
+    const float pointDiffuse = max(dot(normal, pointDirection), 0.0);
+    const float3 pointHalf = normalize(pointDirection + normalize(input.viewDirection));
+    const float pointSpecular = pow(
+        max(dot(normal, pointHalf), 0.0), 48.0) * (floorSurface ? 0.18 : 0.28);
+    const float3 pointLight = camera.pointLightColorIntensity.rgb *
+        camera.pointLightColorIntensity.w * attenuation *
+        (albedo * pointDiffuse * 1.8 + pointSpecular);
+
     const float3 emission = floorSurface
-        ? albedo * 0.10
-        : albedo * 0.72 + float3(0.02, 0.24, 0.34) * rim;
-    const float lightingStrength = floorSurface ? 0.28 : 0.50;
-    const float3 lighting = albedo * lightingStrength + emission + float3(specular);
+        ? albedo * 0.035
+        : albedo * 1.15 + float3(0.02, 0.24, 0.34) *
+            pow(1.0 - max(dot(normal, normalize(input.viewDirection)), 0.0), 2.0);
+    const float ambientStrength = floorSurface ? 0.16 : 0.24;
+    const float directionalStrength = floorSurface ? 0.16 : 0.30;
+    const float3 lighting = albedo * (ambientStrength + directionalDiffuse * directionalStrength) +
+        emission + float3(directionalSpecular) + pointLight;
     return float4(lighting, 1.0);
 }
 )metal";
@@ -134,30 +171,6 @@ struct OverlayConstants {
     Uint32 padding;
 };
 
-constexpr char glowFragmentSource[] = R"metal(
-#include <metal_stdlib>
-using namespace metal;
-
-struct VertexOutput {
-    float4 position [[position]];
-    float3 normal;
-    float3 color;
-    float2 uv;
-    float hasTexCoord;
-    float3 viewDirection;
-    float isFloor;
-};
-
-fragment float4 glow_fragment(VertexOutput input [[stage_in]])
-{
-    const float3 normal = normalize(input.normal);
-    const float3 viewDirection = normalize(input.viewDirection);
-    const float facing = max(dot(normal, viewDirection), 0.0);
-    const float rim = 1.0 - facing;
-    const float alpha = smoothstep(0.55, 0.96, rim) * 0.18;
-    return float4(0.02, 0.82, 1.0, alpha);
-}
-)metal";
 
 constexpr char overlayVertexSource[] = R"metal(
 #include <metal_stdlib>
@@ -836,57 +849,6 @@ bool GpuRenderer::initialize(SDL_Window* window, const std::vector<const Mesh*>&
         return false;
     }
 
-    SDL_GPUShaderCreateInfo glowVertexInfo{};
-    glowVertexInfo.code_size = std::strlen(vertexSource);
-    glowVertexInfo.code = reinterpret_cast<const Uint8*>(vertexSource);
-    glowVertexInfo.entrypoint = "main_vertex";
-    glowVertexInfo.format = SDL_GPU_SHADERFORMAT_MSL;
-    glowVertexInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
-    glowVertexInfo.num_uniform_buffers = 1;
-    SDL_GPUShader* glowVertexShader = SDL_CreateGPUShader(device_, &glowVertexInfo);
-    SDL_GPUShaderCreateInfo glowFragmentInfo{};
-    glowFragmentInfo.code_size = std::strlen(glowFragmentSource);
-    glowFragmentInfo.code = reinterpret_cast<const Uint8*>(glowFragmentSource);
-    glowFragmentInfo.entrypoint = "glow_fragment";
-    glowFragmentInfo.format = SDL_GPU_SHADERFORMAT_MSL;
-    glowFragmentInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
-    SDL_GPUShader* glowFragmentShader = SDL_CreateGPUShader(device_, &glowFragmentInfo);
-    if (glowVertexShader == nullptr || glowFragmentShader == nullptr) {
-        if (glowVertexShader != nullptr) SDL_ReleaseGPUShader(device_, glowVertexShader);
-        if (glowFragmentShader != nullptr) SDL_ReleaseGPUShader(device_, glowFragmentShader);
-        setError("SDL_CreateGPUShader(glow)");
-        shutdown();
-        return false;
-    }
-    SDL_GPUColorTargetDescription glowColorTarget{};
-    glowColorTarget.format = SDL_GetGPUSwapchainTextureFormat(device_, window_);
-    glowColorTarget.blend_state.enable_blend = true;
-    glowColorTarget.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
-    glowColorTarget.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
-    glowColorTarget.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
-    glowColorTarget.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
-    glowColorTarget.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
-    glowColorTarget.blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
-    SDL_GPUGraphicsPipelineCreateInfo glowPipelineInfo = pipelineInfo;
-    glowPipelineInfo.vertex_shader = glowVertexShader;
-    glowPipelineInfo.fragment_shader = glowFragmentShader;
-    glowPipelineInfo.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
-    // Render only the expanded shell's back faces. With depth testing enabled,
-    // the opaque cube surface hides the shell everywhere except its outer rim.
-    glowPipelineInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_FRONT;
-    glowPipelineInfo.depth_stencil_state.enable_depth_test = true;
-    glowPipelineInfo.depth_stencil_state.enable_depth_write = false;
-    glowPipelineInfo.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_LESS_OR_EQUAL;
-    glowPipelineInfo.target_info.color_target_descriptions = &glowColorTarget;
-    glowPipeline_ = SDL_CreateGPUGraphicsPipeline(device_, &glowPipelineInfo);
-    SDL_ReleaseGPUShader(device_, glowFragmentShader);
-    SDL_ReleaseGPUShader(device_, glowVertexShader);
-    if (glowPipeline_ == nullptr) {
-        setError("SDL_CreateGPUGraphicsPipeline(glow)");
-        shutdown();
-        return false;
-    }
-
     SDL_GPUShaderCreateInfo overlayVertexInfo{};
     overlayVertexInfo.code_size = std::strlen(overlayVertexSource);
     overlayVertexInfo.code = reinterpret_cast<const Uint8*>(overlayVertexSource);
@@ -1081,6 +1043,13 @@ bool GpuRenderer::renderFrame(
     const Matrix4 projection = projectionMatrix(
         static_cast<float>(width) / static_cast<float>(height));
     const Matrix4 viewProjection = multiply(projection, view);
+    Vec3 pointLightPosition{0.0F, 0.0F, 4.2F};
+    for (const GpuMeshInstance& instance : instances) {
+        if (instance.object != nullptr && instance.meshIndex == 1U) {
+            pointLightPosition = instance.object->transform.position;
+            break;
+        }
+    }
 
     SDL_BindGPUGraphicsPipeline(pass, wireframe ? wireframePipeline_ : pipeline_);
     for (const GpuMeshInstance& instance : instances) {
@@ -1098,39 +1067,18 @@ bool GpuRenderer::renderFrame(
         constants.cameraPosition[2] = camera.z();
         constants.cameraPosition[3] = 1.0F;
         constants.materialFlags[0] = instance.meshIndex == 2U ? 1.0F : 0.0F;
+        constants.pointLightPositionRange[0] = pointLightPosition.x;
+        constants.pointLightPositionRange[1] = pointLightPosition.y;
+        constants.pointLightPositionRange[2] = pointLightPosition.z;
+        constants.pointLightPositionRange[3] = 8.0F;
+        constants.pointLightColorIntensity[0] = 0.02F;
+        constants.pointLightColorIntensity[1] = 0.72F;
+        constants.pointLightColorIntensity[2] = 1.0F;
+        constants.pointLightColorIntensity[3] = 3.2F;
         SDL_PushGPUVertexUniformData(commandBuffer, 0, &constants,
                                      static_cast<Uint32>(sizeof(constants)));
         const MeshRange& range = meshRanges_[instance.meshIndex];
         SDL_DrawGPUIndexedPrimitives(pass, range.indexCount, 1, range.firstIndex, 0, 0);
-    }
-
-    if (!wireframe && glowPipeline_ != nullptr) {
-        SDL_BindGPUGraphicsPipeline(pass, glowPipeline_);
-        for (const GpuMeshInstance& instance : instances) {
-            if (instance.object == nullptr || !instance.object->visible ||
-                instance.meshIndex != 1U) {
-                continue;
-            }
-            Transform glowTransform = instance.object->transform;
-            glowTransform.scale.x *= 1.16F;
-            glowTransform.scale.y *= 1.16F;
-            glowTransform.scale.z *= 1.16F;
-            const Matrix4 glowModel = modelMatrix(glowTransform);
-            ObjectConstants glowConstants{};
-            glowConstants.model = glowModel;
-            glowConstants.mvp = multiply(viewProjection, glowModel);
-            glowConstants.normalMatrix = normalMatrix(glowTransform);
-            glowConstants.cameraPosition[0] = camera.x();
-            glowConstants.cameraPosition[1] = camera.y();
-            glowConstants.cameraPosition[2] = camera.z();
-            glowConstants.cameraPosition[3] = 1.0F;
-            glowConstants.materialFlags[0] = instance.meshIndex == 2U ? 1.0F : 0.0F;
-            SDL_PushGPUVertexUniformData(commandBuffer, 0, &glowConstants,
-                                         static_cast<Uint32>(sizeof(glowConstants)));
-            const MeshRange& glowRange = meshRanges_[instance.meshIndex];
-            SDL_DrawGPUIndexedPrimitives(pass, glowRange.indexCount, 1,
-                                         glowRange.firstIndex, 0, 0);
-        }
     }
 
     if (showTouchControls && overlayPipeline_ != nullptr) {
