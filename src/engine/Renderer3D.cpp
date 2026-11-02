@@ -813,7 +813,9 @@ bool Renderer3D::render(int width, int height, double elapsedSeconds,
                 const float intensity = 0.24F + 0.76F * std::clamp(diffuse, 0.0F, 1.0F);
 
                 TriangleToDraw item{};
-                constexpr SDL_Color baseColor{72, 190, 238, 255};
+                const SDL_Color baseColor = instance.texturePath.empty()
+                    ? SDL_Color{18, 72, 112, 255}
+                    : SDL_Color{72, 190, 238, 255};
                 const SDL_Color flatColor{
                     static_cast<Uint8>(static_cast<float>(baseColor.r) * intensity),
                     static_cast<Uint8>(static_cast<float>(baseColor.g) * intensity),
