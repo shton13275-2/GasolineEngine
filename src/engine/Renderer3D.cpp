@@ -501,7 +501,8 @@ bool Renderer3D::render(int width, int height, double elapsedSeconds,
     }
     previousElapsedSeconds_ = elapsedSeconds;
 
-    SDL_SetRenderDrawColor(renderer_, 12, 18, 31, 255);
+    // Deep cyan atmosphere shared with the GPU backend.
+    SDL_SetRenderDrawColor(renderer_, 5, 28, 48, 255);
     SDL_RenderClear(renderer_);
 
     const std::size_t pixelCount = static_cast<std::size_t>(width) *
@@ -623,12 +624,12 @@ bool Renderer3D::render(int width, int height, double elapsedSeconds,
     }
 
     const std::array<Face, 6> baseFaces{{
-        {{{0, 1, 2, 3}}, {235, 83, 75, 255}},
-        {{{5, 4, 7, 6}}, {72, 165, 245, 255}},
-        {{{4, 0, 3, 7}}, {74, 201, 157, 255}},
-        {{{1, 5, 6, 2}}, {246, 190, 76, 255}},
-        {{{3, 2, 6, 7}}, {171, 120, 235, 255}},
-        {{{4, 5, 1, 0}}, {76, 207, 220, 255}}
+        {{{0, 1, 2, 3}}, {36, 205, 255, 255}},
+        {{{5, 4, 7, 6}}, {72, 235, 255, 255}},
+        {{{4, 0, 3, 7}}, {18, 145, 205, 255}},
+        {{{1, 5, 6, 2}}, {45, 220, 255, 255}},
+        {{{3, 2, 6, 7}}, {95, 245, 255, 255}},
+        {{{4, 5, 1, 0}}, {24, 180, 235, 255}}
     }};
 
     const std::array<Face, 6>& faces = baseFaces;
@@ -908,7 +909,7 @@ bool Renderer3D::render(int width, int height, double elapsedSeconds,
     }
 
     if (!wireframe) {
-        const SDL_Color gridColor{31, 43, 61, 255};
+        const SDL_Color gridColor{35, 190, 235, 255};
         for (const GridLine& line : gridLines) {
             rasterizeDepthLine(width, height, line.a, line.depthA,
                                line.b, line.depthB, gridColor,
