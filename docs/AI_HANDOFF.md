@@ -605,3 +605,12 @@ CI:
 - 実機での見た目確認は未実施。CI結果は作業後に追記。
 
 - GPU投影の垂直焦点係数もCPUの `min(width,height) * 0.42 * 2.4` と一致する `2.016` に統一。以前のGPU 60度FOVではCPU表示より小さく見える差が残っていた。
+
+
+## GPU wireframe mode — 2026-11-02
+
+- Added a second SDL_GPU graphics pipeline using `SDL_GPU_FILLMODE_LINE`, alongside the existing filled-triangle pipeline.
+- The existing F3 `wireframe` state is now passed into `GpuRenderer::renderFrame`, so the same keyboard toggle selects filled or wireframe rendering in both CPU and GPU modes.
+- GPU wireframe retains the GPU pipeline's depth test and depth-write settings. This differs from CPU wireframe, whose SDL_RenderLine path is not depth-tested.
+- SDL 3.2.10 defines `SDL_GPU_FILLMODE_LINE`; the SDL documentation notes automatic fallback to fill mode on some Android devices. The project currently targets iOS/Windows, but actual Metal pipeline creation and appearance still require runtime verification.
+- Build and test results for this change must be checked against its GitHub Actions run. CI compilation does not verify Metal pipeline creation or the visual result on an iPhone.
