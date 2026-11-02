@@ -951,7 +951,7 @@ bool GpuRenderer::initialize(SDL_Window* window, const std::vector<const Mesh*>&
     overlayPipelineInfo.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
     overlayPipelineInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
     overlayPipelineInfo.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
-    overlayPipelineInfo.multisample_state.sample_count = sampleCount_;
+    overlayPipelineInfo.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_1;
     overlayPipelineInfo.depth_stencil_state.enable_depth_test = false;
     overlayPipelineInfo.depth_stencil_state.enable_depth_write = false;
     overlayPipelineInfo.target_info.color_target_descriptions = &overlayColorTarget;
