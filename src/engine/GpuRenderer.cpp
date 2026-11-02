@@ -31,6 +31,7 @@ struct ObjectConstants {
     Matrix4 model{};
     Matrix4 normalMatrix{};
     float cameraPosition[4]{};
+    float materialFlags[4]{};
 };
 
 constexpr char vertexSource[] = R"metal(
@@ -52,6 +53,7 @@ struct VertexOutput {
     float2 uv;
     float hasTexCoord;
     float3 viewDirection;
+    float isFloor;
 };
 
 struct CameraConstants {
@@ -59,6 +61,7 @@ struct CameraConstants {
     float4x4 model;
     float4x4 normalMatrix;
     float4 cameraPosition;
+    float4 materialFlags;
 };
 
 vertex VertexOutput main_vertex(
@@ -73,6 +76,7 @@ vertex VertexOutput main_vertex(
     output.uv = input.uv;
     output.hasTexCoord = input.hasTexCoord;
     output.viewDirection = normalize(camera.cameraPosition.xyz - worldPosition.xyz);
+    output.isFloor = camera.materialFlags.x;
     return output;
 }
 )metal";
@@ -88,6 +92,7 @@ struct VertexOutput {
     float2 uv;
     float hasTexCoord;
     float3 viewDirection;
+    float isFloor;
 };
 
 fragment float4 main_fragment(
@@ -99,7 +104,7 @@ fragment float4 main_fragment(
         ? input.color
         : baseColorTexture.sample(baseColorSampler, input.uv).rgb * input.color;
     const float3 normal = normalize(input.normal);
-    const bool floorSurface = abs(normal.y) > 0.92;
+    const bool floorSurface = input.isFloor > 0.5;
     const float3 cyanTint = floorSurface
         ? float3(0.025, 0.20, 0.32)
         : float3(0.12, 0.78, 1.0);
@@ -140,6 +145,7 @@ struct VertexOutput {
     float2 uv;
     float hasTexCoord;
     float3 viewDirection;
+    float isFloor;
 };
 
 fragment float4 glow_fragment(VertexOutput input [[stage_in]])
@@ -1091,6 +1097,7 @@ bool GpuRenderer::renderFrame(
             glowConstants.cameraPosition[1] = camera.y();
             glowConstants.cameraPosition[2] = camera.z();
             glowConstants.cameraPosition[3] = 1.0F;
+            glowConstants.materialFlags[0] = instance.meshIndex == 2U ? 1.0F : 0.0F;
             SDL_PushGPUVertexUniformData(commandBuffer, 0, &glowConstants,
                                          static_cast<Uint32>(sizeof(glowConstants)));
             const MeshRange& glowRange = meshRanges_[instance.meshIndex];
@@ -1114,6 +1121,7 @@ bool GpuRenderer::renderFrame(
         constants.cameraPosition[1] = camera.y();
         constants.cameraPosition[2] = camera.z();
         constants.cameraPosition[3] = 1.0F;
+        constants.materialFlags[0] = instance.meshIndex == 2U ? 1.0F : 0.0F;
         SDL_PushGPUVertexUniformData(commandBuffer, 0, &constants,
                                      static_cast<Uint32>(sizeof(constants)));
         const MeshRange& range = meshRanges_[instance.meshIndex];
