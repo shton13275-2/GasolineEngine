@@ -652,5 +652,15 @@ The earlier implementation drew an expanded cube shell at 1.16x scale with front
 - The rotating cube now uses a uniformly emissive cyan surface and supplies its animated world position as a point-light position to the mesh shader.
 - The fragment shader calculates point-light distance attenuation, diffuse response, and specular response for rendered surfaces. The floor therefore receives cyan illumination according to its distance and normal relative to the cube.
 - The point-light data is passed through vertex-stage uniforms and interpolated varyings to the fragment stage; no additional fragment uniform binding is required.
-- This is a real-time local-light approximation, not ray tracing. It does not trace reflections or multiple light bounces. A screen-space bloom/blur post-process is still not implemented.
+- This is a real-time local-light approximation, not ray tracing. It does not trace reflections or multiple light bounces. A screen-space bloom composite is now implemented as a separate post-process.
 - The embedded MSL shader is not compiled by the normal C++ CI build. The matching GitHub Actions run must verify C++ compilation/tests and iOS packaging; actual Metal shader compilation, lighting appearance, and performance still require a physical iPhone test.
+
+
+## GPU screen-space bloom — 2026-11-02
+
+- The scene color is now rendered into a sampleable intermediate texture. When 4x MSAA is supported, the multisample scene target resolves into this texture; otherwise the scene renders directly into the single-sample intermediate.
+- A full-screen triangle composite samples the scene texture with a 9-tap neighborhood filter. Bright samples are selected with a luminance threshold and added to the original scene to create a soft cyan/white glow.
+- The touch-control/FPS overlay is drawn after the bloom composite, so the UI itself is not blurred or included in the bright-pixel extraction.
+- The post-process currently uses the swapchain color format (not a dedicated HDR floating-point target) and a compact 9-tap filter. It is a lightweight screen-space bloom approximation, not a multi-pass Gaussian blur, ray tracing, reflected-light simulation, or global illumination.
+- The intermediate scene texture is recreated when the swapchain dimensions change and released during renderer shutdown. The bloom sampler and pipeline are also released during shutdown.
+- Runtime MSL shader compilation, actual Metal render-target sampling/resolve behavior, visual output, and performance have not been verified on a physical iPhone. The Windows CI job does not validate Metal shader compilation.
