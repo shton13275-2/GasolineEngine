@@ -99,7 +99,7 @@ ctest --test-dir build -C Release --output-on-failure
 ## Build through GitHub Actions (no local Windows PC required)
 
 1. Open the repository's Actions tab.
-2. Select the Build workflow and choose Run workflow, or push a commit to main.
+2. Select the Build workflow and choose Run workflow, or push a commit to `ios/initial-support`.
 3. Open the completed run and download the Gasoline Engine-Windows-x64 artifact.
 4. Extract the ZIP and run originalengine_app.exe on a compatible Windows PC.
 
@@ -111,7 +111,7 @@ GitHub Actions can compile the Windows app and run automated tests, but it canno
 include/engine/       Public engine headers
 src/engine/           Engine implementations
 src/main.cpp          Sample application entry point
-tests/                Automated camera, collision, and scene tests
+tests/                Automated unit and smoke tests, including touch-overlay hit testing
 .github/workflows/    GitHub Actions workflow
 ```
 
