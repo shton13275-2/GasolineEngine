@@ -123,7 +123,7 @@ jobs:
                   "\\n**Branch:** " + $branch +
                   "\\n**Commit:** [" + ($commit[0:7]) + "](" + $url + ")" +
                   "\\n**Message:** " + $message),
-                color: (if ([ $windows, $ios ] | all(. == "success")) then 5763719 else 15548997 end),
+                color: (if ($windows == "success") then 5763719 else 15548997 end),
                 fields: [
                   {name: "Windows", value: $windows, inline: true},
                   {name: "Triggered by", value: $actor, inline: true},
