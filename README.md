@@ -51,6 +51,7 @@ For a complete, source-oriented handoff covering verified implementation status,
 - **Mouse movement:** look around while captured
 - **iPhone/iPad touch:** drag on the left half to move; drag on the right half to look around. Both can be used simultaneously.
 - The on-screen CPU/GPU switch responds only inside its visible button rectangle.
+- Switching render backends cancels active touch movement/look input and ignores held keyboard movement keys until they are released.
 - **Esc:** release the mouse; press again to exit
 
 The top-left debug overlay displays a smoothed FPS estimate, camera position (X/Y/Z), mouse-look sensitivity, and a reminder of the main controls. F3 switches the cube and loaded OBJ meshes between filled polygons and wireframe outlines. Filled 3D triangles and floor-grid lines use a CPU-side Z-buffer, so nearer surfaces win per pixel instead of relying only on polygon draw order. Wireframe lines are not depth-tested yet. It uses SDL3's built-in debug text renderer, so no font or SDL_ttf asset is required.
@@ -153,13 +154,13 @@ Gasoline Engine は、C++20 を基盤として開発しているクロスプラ�
 - カメラの移動に応じて見え方が変わり、近いメッシュに隠れる、ワールド座標系の透視投影フロアグリッド
 - ソフトウェア描画は 1 フレームあたり 360,000 ピクセルに制限され、SDL により拡大表示されるため、高 DPI ウィンドウやリサイズで CPU・メモリ使用量が無制限に増加しない
 - 塗りつぶしポリゴンとフロアグリッド線に対応した CPU 側 Z バッファによるピクセル単位の奥行き判定
-- GitHub Actions による Windows 実行ファイルのビルド、カメラ・衝突判定・シーン管理・OBJ ローダー・PPM 画像・ソフトウェアレンダラー・GPU ジオメトリ判定・GPU フレーム復旧・タッチボタンのヒット判定のユニットテスト、描画スモークテスト、および成果物のアップロード
+- GitHub Actions による Windows 実行ファイルのビルド、カメラ・衝突判定・シーン管理・OBJ ローダー・PPM 画像・ソフトウェアレンダラー・GPU ジオメトリ判定・GPU フレーム復旧・タッチボタンのヒット判定・バックエンド切替時の入力リセットのユニットテスト、描画スモークテスト、および成果物のアップロード
 
 > CPU 側には透視投影、Z バッファ、透視補正付き UV テクスチャ描画、近接平面クリッピング、ワイヤーフレームに対応したソフトウェアレンダラーがあります。別経路の実験的な SDL_GPU レンダラーもあり、OBJ メッシュ、シーンオブジェクト、深度テスト、P3 PPM テクスチャ、ライティング、タッチオーバーレイを描画します。GPU 経路は MSL を使用し、iPhone 実機での Metal 動作は未確認です。
 
 ## カメラ操作
 
-- **iPhone/iPad の切替ボタン：** 表示されている CPU/GPU ボタンの矩形内をタップすると描画バックエンドを切り替えます。
+- **iPhone/iPad の切替ボタン：** 表示されている CPU/GPU ボタンの矩形内をタップすると描画バックエンドを切り替えます。切替時には進行中の移動・視点タッチを解除します。
 - **W / S：** 前進 / 後退
 - **A / D：** 左右に平行移動
 - **Q / E：** 下 / 上に移動

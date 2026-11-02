@@ -148,4 +148,8 @@ if(BUILD_TESTING)
     add_executable(originalengine_touch_overlay_tests tests/touch_overlay_tests.cpp)
     target_link_libraries(originalengine_touch_overlay_tests PRIVATE originalengine)
     add_test(NAME touch_overlay_hit_test COMMAND originalengine_touch_overlay_tests)
+
+    add_executable(originalengine_backend_switch_input_tests tests/backend_switch_input_tests.cpp)
+    target_link_libraries(originalengine_backend_switch_input_tests PRIVATE originalengine)
+    add_test(NAME backend_switch_input COMMAND originalengine_backend_switch_input_tests)
 endif()

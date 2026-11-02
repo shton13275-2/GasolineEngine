@@ -3,6 +3,7 @@
 #include "engine/Renderer3D.hpp"
 #include "engine/GpuDeviceProbe.hpp"
 #include "engine/GpuFrameRecovery.hpp"
+#include "engine/BackendSwitchInput.hpp"
 #include "engine/GpuRenderer.hpp"
 #include "engine/ObjMeshLoader.hpp"
 #include "engine/PpmImageLoader.hpp"
@@ -314,12 +315,7 @@ int main(int argc, char* argv[]) {
         bool fullscreen = false;
         SDL_FingerID movementFinger = 0;
         SDL_FingerID lookFinger = 0;
-        bool hasMovementFinger = false;
-        bool hasLookFinger = false;
-        float movementX = 0.0F;
-        float movementY = 0.0F;
-        float lookDeltaX = 0.0F;
-        float lookDeltaY = 0.0F;
+        originalengine::BackendSwitchInputState backendSwitchInput;
         Uint64 previousTicks = SDL_GetTicks();
         double elapsedSeconds = 0.0;
         float smoothedFps = 0.0F;
@@ -340,31 +336,31 @@ int main(int argc, char* argv[]) {
                                 static_cast<float>(touchWidth),
                                 static_cast<float>(touchHeight))) {
                             backendToggleRequested = true;
-                        } else if (event.tfinger.x < 0.5F && !hasMovementFinger) {
+                        } else if (event.tfinger.x < 0.5F && !backendSwitchInput.hasMovementFinger) {
                             movementFinger = event.tfinger.fingerID;
-                            hasMovementFinger = true;
-                            movementX = event.tfinger.x;
-                            movementY = event.tfinger.y;
-                        } else if (event.tfinger.x >= 0.5F && !hasLookFinger) {
+                            backendSwitchInput.hasMovementFinger = true;
+                            backendSwitchInput.movementX = event.tfinger.x;
+                            backendSwitchInput.movementY = event.tfinger.y;
+                        } else if (event.tfinger.x >= 0.5F && !backendSwitchInput.hasLookFinger) {
                             lookFinger = event.tfinger.fingerID;
-                            hasLookFinger = true;
+                            backendSwitchInput.hasLookFinger = true;
                         }
                     } else if (event.type == SDL_EVENT_FINGER_MOTION) {
-                        if (hasMovementFinger && event.tfinger.fingerID == movementFinger) {
-                            movementX = event.tfinger.x;
-                            movementY = event.tfinger.y;
-                        } else if (hasLookFinger && event.tfinger.fingerID == lookFinger) {
-                            lookDeltaX += event.tfinger.dx * static_cast<float>(touchWidth);
-                            lookDeltaY += event.tfinger.dy * static_cast<float>(touchHeight);
+                        if (backendSwitchInput.hasMovementFinger && event.tfinger.fingerID == movementFinger) {
+                            backendSwitchInput.movementX = event.tfinger.x;
+                            backendSwitchInput.movementY = event.tfinger.y;
+                        } else if (backendSwitchInput.hasLookFinger && event.tfinger.fingerID == lookFinger) {
+                            backendSwitchInput.lookDeltaX += event.tfinger.dx * static_cast<float>(touchWidth);
+                            backendSwitchInput.lookDeltaY += event.tfinger.dy * static_cast<float>(touchHeight);
                         }
                     } else {
-                        if (hasMovementFinger && event.tfinger.fingerID == movementFinger) {
-                            hasMovementFinger = false;
-                            movementX = 0.0F;
-                            movementY = 0.0F;
+                        if (backendSwitchInput.hasMovementFinger && event.tfinger.fingerID == movementFinger) {
+                            backendSwitchInput.hasMovementFinger = false;
+                            backendSwitchInput.movementX = 0.0F;
+                            backendSwitchInput.movementY = 0.0F;
                         }
-                        if (hasLookFinger && event.tfinger.fingerID == lookFinger) {
-                            hasLookFinger = false;
+                        if (backendSwitchInput.hasLookFinger && event.tfinger.fingerID == lookFinger) {
+                            backendSwitchInput.hasLookFinger = false;
                         }
                     }
                 } else if (event.type == SDL_EVENT_QUIT) {
@@ -432,6 +428,11 @@ int main(int argc, char* argv[]) {
 
             if (backendToggleRequested) {
                 backendToggleRequested = false;
+                // A backend transition must not inherit an active movement/look
+                // gesture or a held keyboard movement key from the previous mode.
+                backendSwitchInput.resetForBackendSwitch();
+                movementFinger = 0;
+                lookFinger = 0;
                 if (!gpuMode) {
                     renderer3D.reset();
                     SDL_DestroyRenderer(renderer);
@@ -487,23 +488,34 @@ int main(int argc, char* argv[]) {
 
             if (!smokeTest) {
                 const bool* keys = SDL_GetKeyboardState(nullptr);
-                float forward = static_cast<float>(keys[SDL_SCANCODE_W]) -
-                                      static_cast<float>(keys[SDL_SCANCODE_S]);
-                float right = static_cast<float>(keys[SDL_SCANCODE_D]) -
-                                    static_cast<float>(keys[SDL_SCANCODE_A]);
-                const float vertical = static_cast<float>(keys[SDL_SCANCODE_E]) -
-                                       static_cast<float>(keys[SDL_SCANCODE_Q]);
-                const bool fast = keys[SDL_SCANCODE_LSHIFT] || keys[SDL_SCANCODE_RSHIFT];
-                if (hasMovementFinger && touchWidth > 0 && touchHeight > 0) {
+                const bool anyMovementKeyDown =
+                    keys[SDL_SCANCODE_W] || keys[SDL_SCANCODE_S] ||
+                    keys[SDL_SCANCODE_A] || keys[SDL_SCANCODE_D] ||
+                    keys[SDL_SCANCODE_Q] || keys[SDL_SCANCODE_E] ||
+                    keys[SDL_SCANCODE_LSHIFT] || keys[SDL_SCANCODE_RSHIFT];
+                const bool suppressKeyboardMovement =
+                    backendSwitchInput.shouldSuppressKeyboardMovement(anyMovementKeyDown);
+                float forward = suppressKeyboardMovement ? 0.0F :
+                    static_cast<float>(keys[SDL_SCANCODE_W]) -
+                    static_cast<float>(keys[SDL_SCANCODE_S]);
+                float right = suppressKeyboardMovement ? 0.0F :
+                    static_cast<float>(keys[SDL_SCANCODE_D]) -
+                    static_cast<float>(keys[SDL_SCANCODE_A]);
+                const float vertical = suppressKeyboardMovement ? 0.0F :
+                    static_cast<float>(keys[SDL_SCANCODE_E]) -
+                    static_cast<float>(keys[SDL_SCANCODE_Q]);
+                const bool fast = !suppressKeyboardMovement &&
+                    (keys[SDL_SCANCODE_LSHIFT] || keys[SDL_SCANCODE_RSHIFT]);
+                if (backendSwitchInput.hasMovementFinger && touchWidth > 0 && touchHeight > 0) {
                     const float anchorX = static_cast<float>(touchWidth) * 0.20F;
                     const float anchorY = static_cast<float>(touchHeight) * 0.78F;
                     const float radius = static_cast<float>(std::min(touchWidth, touchHeight)) * 0.14F;
-                    right = std::clamp((movementX * static_cast<float>(touchWidth) - anchorX) / radius, -1.0F, 1.0F);
-                    forward = std::clamp(-(movementY * static_cast<float>(touchHeight) - anchorY) / radius, -1.0F, 1.0F);
+                    right = std::clamp((backendSwitchInput.movementX * static_cast<float>(touchWidth) - anchorX) / radius, -1.0F, 1.0F);
+                    forward = std::clamp(-(backendSwitchInput.movementY * static_cast<float>(touchHeight) - anchorY) / radius, -1.0F, 1.0F);
                 }
-                camera.rotate(lookDeltaX, lookDeltaY);
-                lookDeltaX = 0.0F;
-                lookDeltaY = 0.0F;
+                camera.rotate(backendSwitchInput.lookDeltaX, backendSwitchInput.lookDeltaY);
+                backendSwitchInput.lookDeltaX = 0.0F;
+                backendSwitchInput.lookDeltaY = 0.0F;
                 camera.move(forward, right, vertical, deltaSeconds, fast, &collisionWorld);
             }
 
@@ -513,8 +525,8 @@ int main(int argc, char* argv[]) {
                     [&]() {
                         if (gpuRenderer == nullptr) return false;
                         const bool rendered = gpuRenderer->renderFrame(
-                            camera, gpuSceneObjects, !smokeTest, hasMovementFinger,
-                            movementX, movementY, smoothedFps);
+                            camera, gpuSceneObjects, !smokeTest, backendSwitchInput.hasMovementFinger,
+                            backendSwitchInput.movementX, backendSwitchInput.movementY, smoothedFps);
                         if (!rendered) gpuFailure = gpuRenderer->lastError();
                         return rendered;
                     },
@@ -581,12 +593,12 @@ int main(int argc, char* argv[]) {
                     joyX + joyRadius * movementGuideRadius, joyY);
                 (void)SDL_RenderLine(renderer, joyX, joyY - joyRadius * movementGuideRadius,
                     joyX, joyY + joyRadius * movementGuideRadius);
-                const float knobX = hasMovementFinger
-                    ? joyX + std::clamp(movementX * static_cast<float>(width) - joyX,
+                const float knobX = backendSwitchInput.hasMovementFinger
+                    ? joyX + std::clamp(backendSwitchInput.movementX * static_cast<float>(width) - joyX,
                                         -joyRadius * movementGuideRadius, joyRadius * movementGuideRadius)
                     : joyX;
-                const float knobY = hasMovementFinger
-                    ? joyY + std::clamp(movementY * static_cast<float>(height) - joyY,
+                const float knobY = backendSwitchInput.hasMovementFinger
+                    ? joyY + std::clamp(backendSwitchInput.movementY * static_cast<float>(height) - joyY,
                                         -joyRadius * movementGuideRadius, joyRadius * movementGuideRadius)
                     : joyY;
                 SDL_SetRenderDrawColor(renderer, knobColor.r, knobColor.g, knobColor.b, knobColor.a);

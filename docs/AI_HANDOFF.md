@@ -568,3 +568,12 @@ CI:
 - Added `touch_overlay_hit_test` coverage for landscape and portrait dimensions, inside/outside points, all rectangle edges, the previous overly broad hit region, and zero-sized viewports.
 - Corrected README and handoff statements: CPU wireframe lines are not depth-tested; CPU BMP texture loading is implemented through SDL_LoadBMP; the GPU frame-recovery control-flow test exists but does not inject a real SDL_GPU failure.
 - The new code must be verified by the workflow run for the resulting commit. Physical iPhone touch behavior and Metal rendering remain unverified.
+
+
+## Backend-switch movement persistence fix — 2026-11-02
+
+- Confirmed that `src/main.cpp` retained `hasMovementFinger` and the last movement coordinates across CPU/GPU transitions. The main loop continued to feed that state into `Camera::move` after the renderer changed.
+- Added `BackendSwitchInputState` to clear active movement/look touch state and pending look deltas whenever a backend switch is requested.
+- Added a keyboard movement gate: if WASD/QE/Shift is held during the transition, keyboard movement remains suppressed until all those keys are released, preventing a held key from carrying movement into the new backend.
+- Added `backend_switch_input` unit tests for touch-state clearing and keyboard release gating.
+- This is a source-level fix with deterministic unit coverage. Physical iPhone touch behavior must still be confirmed with the resulting IPA; Windows/iOS CI must complete for this commit before calling it build-verified.

@@ -61,3 +61,10 @@ Keyboard input **G** requests a backend switch. The touch interface also has a t
 - On GPU failure, it invokes GPU release first, then CPU renderer creation, returning `CpuFallbackReady` or `Fatal`.
 - `gpu_frame_recovery` tests all three result paths and the callback ordering.
 - This is a deterministic control-flow test. It does not inject an SDL_GPU failure, validate SDL window-claim release/reclaim, or establish physical-device Metal recovery.
+
+
+## Input state during backend transitions
+
+- `src/main.cpp` resets active movement/look touch state and pending look deltas whenever a CPU/GPU switch is requested, so the new renderer does not inherit an active joystick gesture.
+- Keyboard movement keys held during the transition are ignored until all movement keys (W/A/S/D/Q/E/Shift) are released. New keyboard movement is accepted after that release boundary.
+- `backend_switch_input` tests the shared reset and keyboard-gating logic. It does not replace physical iPhone touch testing.
