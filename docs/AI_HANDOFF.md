@@ -616,3 +616,12 @@ CI:
 - GPU wireframe retains the GPU pipeline's depth test and depth-write settings. This differs from CPU wireframe, whose SDL_RenderLine path is not depth-tested.
 - SDL 3.2.10 defines `SDL_GPU_FILLMODE_LINE`; the SDL documentation notes automatic fallback to fill mode on some Android devices. The project currently targets iOS/Windows, but actual Metal pipeline creation and appearance still require runtime verification.
 - Build and test results for this change must be checked against its GitHub Actions run. CI compilation does not verify Metal pipeline creation or the visual result on an iPhone.
+
+
+## GPU multisample anti-aliasing — 2026-11-02
+
+- Added runtime capability selection for 4x MSAA in the SDL_GPU renderer. The renderer checks color-target format support and 4x sample-count support for both the swapchain color format and selected depth format.
+- When supported, scene and overlay pipelines use 4x multisampling. Rendering targets a size-matched multisample color texture and resolves into the swapchain texture at the end of the render pass; the depth texture uses the same sample count.
+- When 4x MSAA is not supported, the renderer retains the existing single-sample swapchain path.
+- Multisample color/depth targets are recreated when the swapchain dimensions change and released during shutdown.
+- This source change requires its own Windows/iOS CI run. CI compilation does not verify Metal runtime support, visual edge quality, or performance on a physical iPhone.
