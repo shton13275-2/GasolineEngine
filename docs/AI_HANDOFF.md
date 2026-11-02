@@ -637,3 +637,10 @@ CI:
 ## GPU cube glow update
 
 A dedicated GPU glow pipeline is used for the rotating cube. It draws the same cube mesh at 1.16x scale with additive cyan blending and a view-dependent rim alpha before the opaque cube pass. This is a silhouette glow approximation, not blur-based bloom. Wireframe mode skips the glow pass. The pipeline is released during GpuRenderer shutdown. Physical iPhone/Metal appearance remains unverified.
+
+
+## Floor/cube color separation
+
+- CPU: the untextured floor mesh uses a dark blue material; the cyan floor grid is also darker and less saturated than the cube.
+- GPU: a per-instance material flag identifies the floor mesh and selects a dark blue-teal tint with reduced emission/specular. The cube keeps its bright cyan tint and glow. Material selection is explicit by mesh instance index, not based on normal direction, so cube top/bottom faces are not treated as floor.
+- Visual appearance remains unverified on physical iPhone hardware.
