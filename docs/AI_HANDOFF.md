@@ -632,3 +632,8 @@ CI:
 - `src/main.cpp` creates a shared cyan floor plane mesh and `CyanFloor` scene object. The CPU renderer draws it with its existing mesh path and overlays the depth-tested floor grid. The GPU renderer uploads it as a third mesh and draws it as a scene instance.
 - GPU fragment shader applies a cyan tint, increased specular contribution, emissive cyan term, and view-angle rim highlight. This is shader-based emissive styling, not a bloom post-process.
 - The GPU clear color is a matching dark blue/cyan tone. Actual Metal appearance and performance remain unverified until tested on a physical iPhone.
+
+
+## GPU cube glow update
+
+A dedicated GPU glow pipeline is used for the rotating cube. It draws the same cube mesh at 1.16x scale with additive cyan blending and a view-dependent rim alpha before the opaque cube pass. This is a silhouette glow approximation, not blur-based bloom. Wireframe mode skips the glow pass. The pipeline is released during GpuRenderer shutdown. Physical iPhone/Metal appearance remains unverified.
