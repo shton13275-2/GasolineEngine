@@ -136,7 +136,7 @@ jobs:
     name: Discord Notification
     runs-on: ubuntu-latest
     needs: [windows, ios-unsigned-ipa]
-    if: always()
+    if: always() && needs.ios-unsigned-ipa.result == 'success'
     steps:
       - name: Send detailed build report to Discord
         env:
