@@ -245,3 +245,8 @@ The `gpu_frame_recovery` unit test exercises the shared control flow used by the
 ## GPU rotating cube
 
 When the GPU backend is active, it renders a dedicated six-face cube mesh with per-face UVs and normals. The cube rotates around all three axes; pressing Space pauses or resumes its animation. The GPU cube uses the bundled P3 PPM checker texture and does not replace the CPU renderer's existing demo scene. The procedural cube mesh is covered by the `primitive_meshes` CTest.
+
+
+### GPU multisample anti-aliasing
+
+The experimental SDL_GPU renderer checks runtime format and sample-count support for 4x MSAA on both its color and depth targets. When supported, the 3D scene and GPU overlay render into a multisample color target that resolves to the swapchain. Devices that do not support the required 4x formats retain the single-sample rendering path. Actual Metal rendering, edge quality, and performance must still be checked on a physical iPhone.
