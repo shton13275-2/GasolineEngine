@@ -259,3 +259,8 @@ The CPU and experimental GPU renderers share a dark cyan sky, a cyan floor surfa
 ### GPU cube glow
 
 The GPU renderer draws an additive cyan rim pass for the rotating cube before its opaque surface pass. The pass expands the cube slightly and blends a view-dependent cyan edge contribution; it is a lightweight silhouette glow, not a blurred bloom post-process. Wireframe mode skips this glow pass. Physical iPhone appearance still requires device verification.
+
+
+### Floor and cube color separation
+
+The floor uses a darker blue-teal material, while the rotating cube keeps the bright cyan treatment. The GPU renderer selects the floor material through a per-instance uniform flag rather than inferring it from surface normals, so horizontal cube faces keep the cube material. The CPU floor mesh and grid are also darker than the cube.
