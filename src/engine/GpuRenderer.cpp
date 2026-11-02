@@ -56,6 +56,8 @@ struct VertexOutput {
     float hasTexCoord;
     float3 viewDirection;
     float3 worldPosition;
+    float4 pointLightPositionRange;
+    float4 pointLightColorIntensity;
     float isFloor;
 };
 
@@ -82,6 +84,8 @@ vertex VertexOutput main_vertex(
     output.hasTexCoord = input.hasTexCoord;
     output.viewDirection = normalize(camera.cameraPosition.xyz - worldPosition.xyz);
     output.worldPosition = worldPosition.xyz;
+    output.pointLightPositionRange = camera.pointLightPositionRange;
+    output.pointLightColorIntensity = camera.pointLightColorIntensity;
     output.isFloor = camera.materialFlags.x;
     return output;
 }
@@ -99,6 +103,8 @@ struct VertexOutput {
     float hasTexCoord;
     float3 viewDirection;
     float3 worldPosition;
+    float4 pointLightPositionRange;
+    float4 pointLightColorIntensity;
     float isFloor;
 };
 
@@ -114,7 +120,6 @@ struct CameraConstants {
 
 fragment float4 main_fragment(
     VertexOutput input [[stage_in]],
-    constant CameraConstants& camera [[buffer(0)]],
     texture2d<float> baseColorTexture [[texture(0)]],
     sampler baseColorSampler [[sampler(0)]])
 {
@@ -133,11 +138,11 @@ fragment float4 main_fragment(
     const float directionalSpecular = pow(
         max(dot(normal, directionalHalf), 0.0), 32.0) * (floorSurface ? 0.04 : 0.16);
 
-    const float3 toPointLight = camera.pointLightPositionRange.xyz - input.worldPosition;
+    const float3 toPointLight = input.pointLightPositionRange.xyz - input.worldPosition;
     const float lightDistance = length(toPointLight);
     const float3 pointDirection = lightDistance > 0.0001
         ? toPointLight / lightDistance : normal;
-    const float lightRange = max(camera.pointLightPositionRange.w, 0.001);
+    const float lightRange = max(input.pointLightPositionRange.w, 0.001);
     const float rangeFade = max(1.0 - lightDistance / lightRange, 0.0);
     const float attenuation = rangeFade * rangeFade /
         (1.0 + 0.18 * lightDistance * lightDistance);
@@ -145,8 +150,8 @@ fragment float4 main_fragment(
     const float3 pointHalf = normalize(pointDirection + normalize(input.viewDirection));
     const float pointSpecular = pow(
         max(dot(normal, pointHalf), 0.0), 48.0) * (floorSurface ? 0.18 : 0.28);
-    const float3 pointLight = camera.pointLightColorIntensity.rgb *
-        camera.pointLightColorIntensity.w * attenuation *
+    const float3 pointLight = input.pointLightColorIntensity.rgb *
+        input.pointLightColorIntensity.w * attenuation *
         (albedo * pointDiffuse * 1.8 + pointSpecular);
 
     const float3 emission = floorSurface
