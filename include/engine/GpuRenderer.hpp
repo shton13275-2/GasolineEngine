@@ -61,6 +61,7 @@ private:
     SDL_Window* window_{nullptr};
     SDL_GPUDevice* device_{nullptr};
     SDL_GPUGraphicsPipeline* pipeline_{nullptr};
+    SDL_GPUGraphicsPipeline* glowPipeline_{nullptr};
     SDL_GPUGraphicsPipeline* wireframePipeline_{nullptr};
     SDL_GPUGraphicsPipeline* overlayPipeline_{nullptr};
     SDL_GPUBuffer* vertexBuffer_{nullptr};
