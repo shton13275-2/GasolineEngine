@@ -966,7 +966,18 @@ bool GpuRenderer::initialize(SDL_Window* window, const std::vector<const Mesh*>&
         shutdown();
         return false;
     }
-    // Bloom pipeline creation is kept separate from the scene pipeline.
+    SDL_GPUShaderCreateInfo bloomVertexInfo{};
+    bloomVertexInfo.code_size = std::strlen(bloomVertexSource);
+    bloomVertexInfo.code = reinterpret_cast<const Uint8*>(bloomVertexSource);
+    bloomVertexInfo.entrypoint = "bloom_vertex";
+    bloomVertexInfo.format = SDL_GPU_SHADERFORMAT_MSL;
+    bloomVertexInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
+    SDL_GPUShader* bloomVertexShader = SDL_CreateGPUShader(device_, &bloomVertexInfo);
+    if (bloomVertexShader == nullptr) {
+        setError("SDL_CreateGPUShader(bloom vertex)");
+        shutdown();
+        return false;
+    }
     return true;
 }
 
