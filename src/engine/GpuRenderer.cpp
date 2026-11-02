@@ -956,8 +956,7 @@ bool GpuRenderer::initialize(SDL_Window* window, const std::vector<const Mesh*>&
     overlayPipelineInfo.depth_stencil_state.enable_depth_write = false;
     overlayPipelineInfo.target_info.color_target_descriptions = &overlayColorTarget;
     overlayPipelineInfo.target_info.num_color_targets = 1;
-    overlayPipelineInfo.target_info.has_depth_stencil_target = true;
-    overlayPipelineInfo.target_info.depth_stencil_format = depthFormat_;
+    overlayPipelineInfo.target_info.has_depth_stencil_target = false;
     overlayPipeline_ = SDL_CreateGPUGraphicsPipeline(device_, &overlayPipelineInfo);
     SDL_ReleaseGPUShader(device_, overlayFragmentShader);
     SDL_ReleaseGPUShader(device_, overlayVertexShader);
@@ -1042,6 +1041,10 @@ bool GpuRenderer::createDepthTexture(Uint32 width, Uint32 height) {
         SDL_ReleaseGPUTexture(device_, depthTexture_);
         depthTexture_ = nullptr;
     }
+    if (sceneColorTexture_ != nullptr) {
+        SDL_ReleaseGPUTexture(device_, sceneColorTexture_);
+        sceneColorTexture_ = nullptr;
+    }
     if (multisampleColorTexture_ != nullptr) {
         SDL_ReleaseGPUTexture(device_, multisampleColorTexture_);
         multisampleColorTexture_ = nullptr;
@@ -1064,6 +1067,34 @@ bool GpuRenderer::createDepthTexture(Uint32 width, Uint32 height) {
         return false;
     }
 
+    SDL_GPUTextureCreateInfo sceneColorInfo{};
+    sceneColorInfo.type = SDL_GPU_TEXTURETYPE_2D;
+    sceneColorInfo.format = SDL_GetGPUSwapchainTextureFormat(device_, window_);
+    sceneColorInfo.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    sceneColorInfo.width = width;
+    sceneColorInfo.height = height;
+    sceneColorInfo.layer_count_or_depth = 1;
+    sceneColorInfo.num_levels = 1;
+    sceneColorInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
+    if (!SDL_GPUTextureSupportsFormat(device_, sceneColorInfo.format,
+            SDL_GPU_TEXTURETYPE_2D, sceneColorInfo.usage)) {
+        SDL_ReleaseGPUTexture(device_, depthTexture_);
+        depthTexture_ = nullptr;
+        depthWidth_ = 0;
+        depthHeight_ = 0;
+        lastError_ = "GPU swapchain format cannot be used for sampled scene color";
+        return false;
+    }
+    sceneColorTexture_ = SDL_CreateGPUTexture(device_, &sceneColorInfo);
+    if (sceneColorTexture_ == nullptr) {
+        SDL_ReleaseGPUTexture(device_, depthTexture_);
+        depthTexture_ = nullptr;
+        depthWidth_ = 0;
+        depthHeight_ = 0;
+        setError("SDL_CreateGPUTexture(scene color)");
+        return false;
+    }
+
     if (sampleCount_ != SDL_GPU_SAMPLECOUNT_1) {
         SDL_GPUTextureCreateInfo colorInfo{};
         colorInfo.type = SDL_GPU_TEXTURETYPE_2D;
@@ -1076,6 +1107,8 @@ bool GpuRenderer::createDepthTexture(Uint32 width, Uint32 height) {
         colorInfo.sample_count = sampleCount_;
         multisampleColorTexture_ = SDL_CreateGPUTexture(device_, &colorInfo);
         if (multisampleColorTexture_ == nullptr) {
+            SDL_ReleaseGPUTexture(device_, sceneColorTexture_);
+            sceneColorTexture_ = nullptr;
             SDL_ReleaseGPUTexture(device_, depthTexture_);
             depthTexture_ = nullptr;
             depthWidth_ = 0;
