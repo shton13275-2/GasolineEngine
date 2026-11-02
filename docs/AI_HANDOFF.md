@@ -577,3 +577,13 @@ CI:
 - Added a keyboard movement gate: if WASD/QE/Shift is held during the transition, keyboard movement remains suppressed until all those keys are released, preventing a held key from carrying movement into the new backend.
 - Added `backend_switch_input` unit tests for touch-state clearing and keyboard release gating.
 - This is a source-level fix with deterministic unit coverage. Physical iPhone touch behavior must still be confirmed with the resulting IPA; Windows/iOS CI must complete for this commit before calling it build-verified.
+
+
+## GPU rotating cube — 2026-11-02
+
+- Added `makeTexturedCubeMesh()` in `include/engine/PrimitiveMeshes.hpp`: 24 face-local vertices, 12 triangles, outward face normals, and complete per-face UVs.
+- The GPU backend now uploads this dedicated cube mesh instead of the OBJ pyramid mesh and draws a dedicated `GpuRotatingCube` scene object at the center of the camera view.
+- The GPU cube rotates around X/Y/Z using the existing animation clock. Space pauses/resumes the same clock, so the GPU cube respects the existing animation pause control.
+- The CPU renderer's existing OBJ pyramid instances and software cube path are left unchanged. The GPU mode's scene list contains only the dedicated cube.
+- Added `primitive_meshes` CTest coverage for vertex/triangle counts, UV presence/range, unit normals, and index bounds.
+- Windows CI can verify compilation and the mesh factory test. The regular workflow does not compile embedded MSL at runtime or prove Metal rendering; physical iPhone visual verification is still required.

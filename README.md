@@ -240,3 +240,8 @@ tests/                カメラ・衝突判定・シーンなどのテスト
 ## GPU frame recovery test
 
 The `gpu_frame_recovery` unit test exercises the shared control flow used by the application when a GPU frame succeeds or fails. It verifies that GPU resources are not released on success, that GPU release happens before CPU renderer recreation after a failure, and that a failed CPU recreation is reported as fatal. The test validates callback ordering and result selection; it does not simulate SDL_GPU device loss, a real window-claim transition, or Metal runtime behavior.
+
+
+## GPU rotating cube
+
+When the GPU backend is active, it renders a dedicated six-face cube mesh with per-face UVs and normals. The cube rotates around all three axes; pressing Space pauses or resumes its animation. The GPU cube uses the bundled P3 PPM checker texture and does not replace the CPU renderer's existing demo scene. The procedural cube mesh is covered by the `primitive_meshes` CTest.

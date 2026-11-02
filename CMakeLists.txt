@@ -152,4 +152,8 @@ if(BUILD_TESTING)
     add_executable(originalengine_backend_switch_input_tests tests/backend_switch_input_tests.cpp)
     target_link_libraries(originalengine_backend_switch_input_tests PRIVATE originalengine)
     add_test(NAME backend_switch_input COMMAND originalengine_backend_switch_input_tests)
+
+    add_executable(originalengine_primitive_mesh_tests tests/primitive_mesh_tests.cpp)
+    target_link_libraries(originalengine_primitive_mesh_tests PRIVATE originalengine)
+    add_test(NAME primitive_meshes COMMAND originalengine_primitive_mesh_tests)
 endif()

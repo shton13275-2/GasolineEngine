@@ -7,6 +7,7 @@
 #include "engine/GpuRenderer.hpp"
 #include "engine/ObjMeshLoader.hpp"
 #include "engine/PpmImageLoader.hpp"
+#include "engine/PrimitiveMeshes.hpp"
 #include "engine/Scene.hpp"
 #include "engine/TouchOverlay.hpp"
 
@@ -275,6 +276,7 @@ int main(int argc, char* argv[]) {
             exitCode = 1;
         }
         writeDiagnostic("Stage: OBJ load completed");
+        originalengine::Mesh gpuCubeMesh = originalengine::makeTexturedCubeMesh();
         originalengine::Scene scene;
         originalengine::Transform demoTransform;
         demoTransform.position = {2.6F, -0.2F, 7.0F};
@@ -291,11 +293,19 @@ int main(int argc, char* argv[]) {
             std::cerr << "[OriginalEngine] Could not create the second demo scene object.\n";
             exitCode = 1;
         }
+        originalengine::Transform gpuCubeTransform;
+        gpuCubeTransform.position = {0.0F, 0.0F, 6.0F};
+        gpuCubeTransform.scale = {1.25F, 1.25F, 1.25F};
+        if (!scene.addObject("GpuRotatingCube", gpuCubeTransform)) {
+            std::cerr << "[OriginalEngine] Could not create the GPU cube scene object.\n";
+            exitCode = 1;
+        }
 
         // Resolve object pointers after all additions so vector reallocation cannot invalidate them.
         originalengine::SceneObject* demoObject = scene.findObject("DemoPyramid");
         originalengine::SceneObject* leftObject = scene.findObject("DemoPyramidLeft");
-        if (demoObject == nullptr || leftObject == nullptr) {
+        originalengine::SceneObject* gpuCubeObject = scene.findObject("GpuRotatingCube");
+        if (demoObject == nullptr || leftObject == nullptr || gpuCubeObject == nullptr) {
             std::cerr << "[OriginalEngine] A demo scene object was not found.\n";
             exitCode = 1;
         }
@@ -304,7 +314,7 @@ int main(int argc, char* argv[]) {
             {&demoMesh, leftObject, texturePath.string()}
         };
         const std::vector<const originalengine::SceneObject*> gpuSceneObjects{
-            demoObject, leftObject
+            gpuCubeObject
         };
         // Conservative static bounds around the demo cube.
         collisionWorld.addObstacle({-1.4F, -1.4F, 2.8F, 1.4F, 1.4F, 5.6F});
@@ -438,7 +448,7 @@ int main(int argc, char* argv[]) {
                     SDL_DestroyRenderer(renderer);
                     renderer = nullptr;
                     gpuRenderer = std::make_unique<originalengine::GpuRenderer>();
-                    if (gpuRenderer->initialize(window, demoMesh, demoTexture)) {
+                    if (gpuRenderer->initialize(window, gpuCubeMesh, demoTexture)) {
                         gpuMode = true;
                         writeDiagnostic("GPU renderer active: " + gpuRenderer->driverName());
                         SDL_SetWindowTitle(window, "Gasoline Engine | GPU preview | G: switch to CPU");
@@ -520,6 +530,14 @@ int main(int argc, char* argv[]) {
             }
 
             if (gpuMode) {
+                if (gpuCubeObject != nullptr) {
+                    const float rotationTime = static_cast<float>(elapsedSeconds);
+                    gpuCubeObject->transform.rotation = {
+                        rotationTime * 0.55F,
+                        rotationTime * 0.80F,
+                        rotationTime * 0.35F
+                    };
+                }
                 std::string gpuFailure = "renderer unavailable";
                 const auto recovery = originalengine::runGpuFrameWithCpuFallback(
                     [&]() {

@@ -68,3 +68,11 @@ Keyboard input **G** requests a backend switch. The touch interface also has a t
 - `src/main.cpp` resets active movement/look touch state and pending look deltas whenever a CPU/GPU switch is requested, so the new renderer does not inherit an active joystick gesture.
 - Keyboard movement keys held during the transition are ignored until all movement keys (W/A/S/D/Q/E/Shift) are released. New keyboard movement is accepted after that release boundary.
 - `backend_switch_input` tests the shared reset and keyboard-gating logic. It does not replace physical iPhone touch testing.
+
+
+## GPU rotating cube
+
+- The application creates a procedural cube mesh with 24 face-local vertices and 12 triangles. Each face has its own outward normal and full UV square, allowing the existing GPU P3 checker texture and lighting shader to shade all six sides.
+- GPU mode initializes its mesh buffers from this cube and submits a dedicated scene object whose X/Y/Z rotation is updated from the shared elapsed-time clock each frame.
+- The existing Space animation pause control freezes that clock. CPU mesh instances and the CPU software-rendered demo remain unchanged.
+- `primitive_meshes` checks the generated mesh structure; it does not execute the GPU pipeline or validate the visual result on Metal.
