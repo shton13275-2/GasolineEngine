@@ -1249,10 +1249,6 @@ void GpuRenderer::shutdown() noexcept {
         }
         depthWidth_ = 0;
         depthHeight_ = 0;
-        if (glowPipeline_ != nullptr) {
-            SDL_ReleaseGPUGraphicsPipeline(device_, glowPipeline_);
-            glowPipeline_ = nullptr;
-        }
         if (overlayPipeline_ != nullptr) {
             SDL_ReleaseGPUGraphicsPipeline(device_, overlayPipeline_);
             overlayPipeline_ = nullptr;
