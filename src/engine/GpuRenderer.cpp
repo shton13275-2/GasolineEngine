@@ -966,6 +966,7 @@ bool GpuRenderer::initialize(SDL_Window* window, const std::vector<const Mesh*>&
         shutdown();
         return false;
     }
+    // Bloom pipeline creation is kept separate from the scene pipeline.
     return true;
 }
 
