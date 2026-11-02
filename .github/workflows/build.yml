@@ -54,6 +54,84 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  ios-unsigned-ipa:
+    name: iOS Device / Unsigned IPA
+    runs-on: macos-15
+    steps:
+      - name: Check out repository (exclude docs)
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            CMakeLists.txt
+            assets
+            include
+            shaders
+            src
+            tests
+          sparse-checkout-cone-mode: true
+
+      - name: Set up CMake
+        uses: lukka/get-cmake@latest
+
+      - name: Record Xcode version
+        id: xcode-version
+        shell: bash
+        run: |
+          xcode_version="$(xcodebuild -version | paste -sd ' ' -)"
+          echo "version=$xcode_version" >> "$GITHUB_OUTPUT"
+
+      - name: Cache SDL3 source
+        uses: actions/cache@v4
+        with:
+          path: build-ios/_deps/sdl3-src
+          key: ios-sdl3-source-${{ runner.os }}-${{ steps.xcode-version.outputs.version }}-${{ hashFiles('CMakeLists.txt') }}
+          restore-keys: |
+            ios-sdl3-source-${{ runner.os }}-
+
+      - name: Configure iOS Device
+        run: >-
+          cmake -S . -B build-ios -G Xcode
+          -DCMAKE_SYSTEM_NAME=iOS
+          -DCMAKE_OSX_SYSROOT=iphoneos
+          -DCMAKE_OSX_ARCHITECTURES=arm64
+          -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0
+          -DORIGINALENGINE_BUILD_APP=ON
+          -DBUILD_TESTING=OFF
+          -DFETCHCONTENT_UPDATES_DISCONNECTED=ON
+
+      - name: Build unsigned iOS app
+        run: >-
+          cmake --build build-ios --config Release --parallel
+          -- -sdk iphoneos
+          CODE_SIGNING_ALLOWED=NO
+          CODE_SIGNING_REQUIRED=NO
+          CODE_SIGNING_IDENTITY=""
+
+      - name: Package unsigned IPA
+        run: |
+          mkdir -p ipa/Payload
+          APP_PATH="$(find build-ios -type d -name originalengine_app.app -print -quit)"
+          test -n "$APP_PATH"
+          cp -R "$APP_PATH" ipa/Payload/
+          cd ipa
+          /usr/bin/zip -qry GasolineEngine-iOS-unsigned.ipa Payload
+
+      - name: Verify IPA
+        run: |
+          test -s ipa/GasolineEngine-iOS-unsigned.ipa
+          /usr/bin/unzip -t ipa/GasolineEngine-iOS-unsigned.ipa
+          /usr/bin/unzip -l ipa/GasolineEngine-iOS-unsigned.ipa
+          /usr/bin/unzip -Z1 ipa/GasolineEngine-iOS-unsigned.ipa | grep -q '^Payload/originalengine_app.app/Info.plist$'
+          /usr/bin/unzip -Z1 ipa/GasolineEngine-iOS-unsigned.ipa | grep -q '^Payload/originalengine_app.app/originalengine_app$'
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: GasolineEngine-iOS-unsigned-IPA
+          path: ipa/GasolineEngine-iOS-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14
+
   discord-notify:
     name: Discord Notification
     runs-on: ubuntu-latest
@@ -115,17 +193,17 @@ jobs:
             --arg report "$job_report" \
             --arg url "$RUN_URL" \
             --arg windows "$WINDOWS_RESULT" \
-            --arg ios "$IOS_RESULT" \\
+            --arg ios "$IOS_RESULT" \
             '{
               embeds: [{
                 title: "GasolineEngine — Detailed Build Report",
                 description: ("**Overall:** " +
-                  (if ([ $windows, $ios ] | all(. == "success")) then "SUCCESS" else "CHECK REQUIRED" end) +
+                  (if ([$windows, $ios] | all(. == "success")) then "SUCCESS" else "CHECK REQUIRED" end) +
                   "\\n**Workflow:** " + $workflow +
                   "\\n**Branch:** " + $branch +
                   "\\n**Commit:** [" + ($commit[0:7]) + "](" + $url + ")" +
                   "\\n**Message:** " + $message),
-                color: (if ([ $windows, $ios ] | all(. == "success")) then 5763719 else 15548997 end),
+                color: (if ([$windows, $ios] | all(. == "success")) then 5763719 else 15548997 end),
                 fields: [
                   {name: "Windows", value: $windows, inline: true},
                   {name: "iOS unsigned IPA", value: $ios, inline: true},
