@@ -313,8 +313,14 @@ int main(int argc, char* argv[]) {
             {&demoMesh, demoObject, texturePath.string()},
             {&demoMesh, leftObject, texturePath.string()}
         };
-        const std::vector<const originalengine::SceneObject*> gpuSceneObjects{
-            gpuCubeObject
+        const std::vector<const originalengine::Mesh*> gpuMeshes{
+            &demoMesh,
+            &gpuCubeMesh
+        };
+        const std::vector<originalengine::GpuMeshInstance> gpuSceneObjects{
+            {0, demoObject},
+            {0, leftObject},
+            {1, gpuCubeObject}
         };
         // Conservative static bounds around the demo cube.
         collisionWorld.addObstacle({-1.4F, -1.4F, 2.8F, 1.4F, 1.4F, 5.6F});
@@ -448,7 +454,7 @@ int main(int argc, char* argv[]) {
                     SDL_DestroyRenderer(renderer);
                     renderer = nullptr;
                     gpuRenderer = std::make_unique<originalengine::GpuRenderer>();
-                    if (gpuRenderer->initialize(window, gpuCubeMesh, demoTexture)) {
+                    if (gpuRenderer->initialize(window, gpuMeshes, demoTexture)) {
                         gpuMode = true;
                         writeDiagnostic("GPU renderer active: " + gpuRenderer->driverName());
                         SDL_SetWindowTitle(window, "Gasoline Engine | GPU preview | G: switch to CPU");

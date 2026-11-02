@@ -2,6 +2,7 @@
 
 #include <SDL3/SDL.h>
 
+#include <cstddef>
 #include <string>
 #include <vector>
 
@@ -11,6 +12,11 @@
 #include "engine/Scene.hpp"
 
 namespace originalengine {
+
+struct GpuMeshInstance {
+    std::size_t meshIndex{0};
+    const SceneObject* object{nullptr};
+};
 
 // SDL_GPU renderer for indexed triangle meshes and the shared scene camera.
 // Mesh data is uploaded once during initialization; per-object MVP uniforms are
@@ -23,9 +29,9 @@ public:
     GpuRenderer(const GpuRenderer&) = delete;
     GpuRenderer& operator=(const GpuRenderer&) = delete;
 
-    [[nodiscard]] bool initialize(SDL_Window* window, const Mesh& mesh, const RgbaImage& texture);
+    [[nodiscard]] bool initialize(SDL_Window* window, const std::vector<const Mesh*>& meshes, const RgbaImage& texture);
     [[nodiscard]] bool renderFrame(
-        const Camera& camera, const std::vector<const SceneObject*>& objects,
+        const Camera& camera, const std::vector<GpuMeshInstance>& instances,
         bool showTouchControls = true, bool movementActive = false,
         float movementX = 0.0F, float movementY = 0.0F,
         float framesPerSecond = 0.0F);
@@ -64,7 +70,11 @@ private:
     SDL_GPUTextureFormat depthFormat_{SDL_GPU_TEXTUREFORMAT_INVALID};
     Uint32 depthWidth_{0};
     Uint32 depthHeight_{0};
-    Uint32 indexCount_{0};
+    struct MeshRange {
+        Uint32 firstIndex{0};
+        Uint32 indexCount{0};
+    };
+    std::vector<MeshRange> meshRanges_;
     std::string lastError_;
     std::string driverName_;
 };

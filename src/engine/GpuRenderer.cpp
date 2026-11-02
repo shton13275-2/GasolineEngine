@@ -494,7 +494,7 @@ void GpuRenderer::setError(const char* operation) {
     lastError_ = std::string(operation) + " failed: " + SDL_GetError();
 }
 
-bool GpuRenderer::initialize(SDL_Window* window, const Mesh& mesh, const RgbaImage& texture) {
+bool GpuRenderer::initialize(SDL_Window* window, const std::vector<const Mesh*>& meshes, const RgbaImage& texture) {
     shutdown();
     lastError_.clear();
     driverName_.clear();
@@ -502,11 +502,42 @@ bool GpuRenderer::initialize(SDL_Window* window, const Mesh& mesh, const RgbaIma
         lastError_ = "Cannot initialize GPU renderer without a window";
         return false;
     }
+    if (meshes.empty()) {
+        lastError_ = "Cannot initialize GPU renderer without any meshes";
+        return false;
+    }
 
     std::vector<GpuVertex> vertices;
     std::vector<std::uint32_t> indices;
-    if (!buildGpuGeometry(mesh, vertices, indices, lastError_)) {
-        return false;
+    meshRanges_.clear();
+    for (const Mesh* mesh : meshes) {
+        if (mesh == nullptr) {
+            lastError_ = "GPU mesh list contains a null mesh";
+            return false;
+        }
+        std::vector<GpuVertex> meshVertices;
+        std::vector<std::uint32_t> meshIndices;
+        if (!buildGpuGeometry(*mesh, meshVertices, meshIndices, lastError_)) {
+            return false;
+        }
+        if (vertices.size() > std::numeric_limits<Uint32>::max() / sizeof(GpuVertex) -
+                meshVertices.size() ||
+            indices.size() > std::numeric_limits<Uint32>::max() / sizeof(std::uint32_t) -
+                meshIndices.size()) {
+            lastError_ = "Combined GPU mesh buffers exceed SDL_GPU buffer size limits";
+            return false;
+        }
+        const auto firstIndex = static_cast<Uint32>(indices.size());
+        const auto baseVertex = static_cast<std::uint32_t>(vertices.size());
+        for (const std::uint32_t index : meshIndices) {
+            if (index > std::numeric_limits<std::uint32_t>::max() - baseVertex) {
+                lastError_ = "Combined GPU mesh vertex index overflow";
+                return false;
+            }
+            indices.push_back(index + baseVertex);
+        }
+        vertices.insert(vertices.end(), meshVertices.begin(), meshVertices.end());
+        meshRanges_.push_back({firstIndex, static_cast<Uint32>(meshIndices.size())});
     }
     if (!texture.hasValidRgba8Data()) {
         lastError_ =
@@ -568,7 +599,6 @@ bool GpuRenderer::initialize(SDL_Window* window, const Mesh& mesh, const RgbaIma
         shutdown();
         return false;
     }
-    indexCount_ = static_cast<Uint32>(indices.size());
 
     SDL_GPUTextureCreateInfo textureInfo{};
     textureInfo.type = SDL_GPU_TEXTURETYPE_2D;
@@ -843,11 +873,11 @@ bool GpuRenderer::createDepthTexture(Uint32 width, Uint32 height) {
 }
 
 bool GpuRenderer::renderFrame(
-    const Camera& camera, const std::vector<const SceneObject*>& objects,
+    const Camera& camera, const std::vector<GpuMeshInstance>& instances,
     bool showTouchControls, bool movementActive, float movementX, float movementY,
     float framesPerSecond) {
     if (device_ == nullptr || window_ == nullptr || pipeline_ == nullptr ||
-        vertexBuffer_ == nullptr || indexBuffer_ == nullptr) {
+        vertexBuffer_ == nullptr || indexBuffer_ == nullptr || meshRanges_.empty()) {
         lastError_ = "GPU renderer is not initialized";
         return false;
     }
@@ -914,8 +944,9 @@ bool GpuRenderer::renderFrame(
         static_cast<float>(width) / static_cast<float>(height));
     const Matrix4 viewProjection = multiply(projection, view);
 
-    for (const SceneObject* object : objects) {
-        if (object == nullptr || !object->visible) {
+    for (const GpuMeshInstance& instance : instances) {
+        const SceneObject* object = instance.object;
+        if (object == nullptr || !object->visible || instance.meshIndex >= meshRanges_.size()) {
             continue;
         }
         const Matrix4 model = modelMatrix(object->transform);
@@ -929,7 +960,8 @@ bool GpuRenderer::renderFrame(
         constants.cameraPosition[3] = 1.0F;
         SDL_PushGPUVertexUniformData(commandBuffer, 0, &constants,
                                      static_cast<Uint32>(sizeof(constants)));
-        SDL_DrawGPUIndexedPrimitives(pass, indexCount_, 1, 0, 0, 0);
+        const MeshRange& range = meshRanges_[instance.meshIndex];
+        SDL_DrawGPUIndexedPrimitives(pass, range.indexCount, 1, range.firstIndex, 0, 0);
     }
 
     if (showTouchControls && overlayPipeline_ != nullptr) {
@@ -1115,7 +1147,7 @@ void GpuRenderer::shutdown() noexcept {
         device_ = nullptr;
     }
     depthFormat_ = SDL_GPU_TEXTUREFORMAT_INVALID;
-    indexCount_ = 0;
+    meshRanges_.clear();
 }
 
 } // namespace originalengine

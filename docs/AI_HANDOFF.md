@@ -245,9 +245,9 @@ GitHubには少なくとも次のブランチが存在する。
 ## 8. 未実装・既知の制限
 
 - GPU rendererはCPU rendererと同じ機能を持たない。
-- GPU mesh描画はOBJ、SceneObject、Camera、depth testに対応するが、GPU wireframeや全CPU描画機能の移植は未完了。
+- GPU mesh描画はOBJとプロシージャルメッシュを複数mesh rangeとして1組のvertex/index bufferへ格納し、SceneObjectごとにmesh rangeを選択して描画する。GPU wireframeや全CPU描画機能の移植は未完了。
 - GPUの実行時mesh shaderはGpuRenderer.cpp内のMSL文字列。shaders/Metal内の別ファイルは実行時ロードしていない。
-- GPU texture samplingはP3 ASCII PPMに対応。PNG/JPEG/BMPのGPU upload、MTL material parser、複数material/textureは未実装。
+- GPU texture samplingはP3 ASCII PPMに対応。現在はアップロード済みmeshで1つのP3テクスチャを共有する。PNG/JPEG/BMPのGPU upload、MTL material parser、materialごとの複数textureは未実装。
 - mipmap生成は対応形式で実装済み。normal mapとanisotropic filteringは未実装。
 - iOSの物理端末GPU/Metal検証はCIだけではできない。
 - AABB以外の本格的な物理・衝突は未実装。
@@ -587,3 +587,11 @@ CI:
 - The CPU renderer's existing OBJ pyramid instances and software cube path are left unchanged. The GPU mode's scene list contains only the dedicated cube.
 - Added `primitive_meshes` CTest coverage for vertex/triangle counts, UV presence/range, unit normals, and index bounds.
 - Windows CI can verify compilation and the mesh factory test. The regular workflow does not compile embedded MSL at runtime or prove Metal rendering; physical iPhone visual verification is still required.
+
+
+### 2026-11-02 — GPU複数メッシュ描画
+- GPU rendererの単一mesh前提を解消し、OBJピラミッドmeshとプロシージャルcube meshを同じvertex/index bufferへ格納する。
+- meshごとのindex rangeを保持し、各GPU scene instanceがmesh indexを指定して描画する。
+- GPUモードで左右のピラミッド2個と3軸回転cubeを同じフレームに描画する。1/2キーの可視切替とSpaceによるcubeアニメーション停止は既存SceneObjectを共有する。
+- 全meshで同じP3 PPM textureを共有する。material別texture、GPU floor grid、wireframe、CPU HUD全機能のGPU移植はこの変更の対象外。
+- CIと実機Metal描画の確認状態はコミット後に追記する。
