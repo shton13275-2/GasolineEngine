@@ -34,7 +34,7 @@ public:
         const Camera& camera, const std::vector<GpuMeshInstance>& instances,
         bool showTouchControls = true, bool movementActive = false,
         float movementX = 0.0F, float movementY = 0.0F,
-        float framesPerSecond = 0.0F);
+        float framesPerSecond = 0.0F, bool wireframe = false);
     void shutdown() noexcept;
 
     [[nodiscard]] const std::string& lastError() const noexcept { return lastError_; }
@@ -61,6 +61,7 @@ private:
     SDL_Window* window_{nullptr};
     SDL_GPUDevice* device_{nullptr};
     SDL_GPUGraphicsPipeline* pipeline_{nullptr};
+    SDL_GPUGraphicsPipeline* wireframePipeline_{nullptr};
     SDL_GPUGraphicsPipeline* overlayPipeline_{nullptr};
     SDL_GPUBuffer* vertexBuffer_{nullptr};
     SDL_GPUBuffer* indexBuffer_{nullptr};
