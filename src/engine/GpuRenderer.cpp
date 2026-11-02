@@ -152,9 +152,10 @@ fragment float4 glow_fragment(VertexOutput input [[stage_in]])
 {
     const float3 normal = normalize(input.normal);
     const float3 viewDirection = normalize(input.viewDirection);
-    const float rim = 1.0 - max(dot(normal, viewDirection), 0.0);
-    const float alpha = smoothstep(0.12, 0.85, rim) * 0.52;
-    return float4(0.02, 0.72, 1.0, alpha);
+    const float facing = max(dot(normal, viewDirection), 0.0);
+    const float rim = 1.0 - facing;
+    const float alpha = smoothstep(0.55, 0.96, rim) * 0.18;
+    return float4(0.02, 0.82, 1.0, alpha);
 }
 )metal";
 
@@ -870,8 +871,12 @@ bool GpuRenderer::initialize(SDL_Window* window, const std::vector<const Mesh*>&
     glowPipelineInfo.vertex_shader = glowVertexShader;
     glowPipelineInfo.fragment_shader = glowFragmentShader;
     glowPipelineInfo.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
-    glowPipelineInfo.depth_stencil_state.enable_depth_test = false;
+    // Render only the expanded shell's back faces. With depth testing enabled,
+    // the opaque cube surface hides the shell everywhere except its outer rim.
+    glowPipelineInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_FRONT;
+    glowPipelineInfo.depth_stencil_state.enable_depth_test = true;
     glowPipelineInfo.depth_stencil_state.enable_depth_write = false;
+    glowPipelineInfo.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_LESS_OR_EQUAL;
     glowPipelineInfo.target_info.color_target_descriptions = &glowColorTarget;
     glowPipeline_ = SDL_CreateGPUGraphicsPipeline(device_, &glowPipelineInfo);
     SDL_ReleaseGPUShader(device_, glowFragmentShader);
@@ -1077,6 +1082,28 @@ bool GpuRenderer::renderFrame(
         static_cast<float>(width) / static_cast<float>(height));
     const Matrix4 viewProjection = multiply(projection, view);
 
+    SDL_BindGPUGraphicsPipeline(pass, wireframe ? wireframePipeline_ : pipeline_);
+    for (const GpuMeshInstance& instance : instances) {
+        const SceneObject* object = instance.object;
+        if (object == nullptr || !object->visible || instance.meshIndex >= meshRanges_.size()) {
+            continue;
+        }
+        const Matrix4 model = modelMatrix(object->transform);
+        ObjectConstants constants{};
+        constants.model = model;
+        constants.mvp = multiply(viewProjection, model);
+        constants.normalMatrix = normalMatrix(object->transform);
+        constants.cameraPosition[0] = camera.x();
+        constants.cameraPosition[1] = camera.y();
+        constants.cameraPosition[2] = camera.z();
+        constants.cameraPosition[3] = 1.0F;
+        constants.materialFlags[0] = instance.meshIndex == 2U ? 1.0F : 0.0F;
+        SDL_PushGPUVertexUniformData(commandBuffer, 0, &constants,
+                                     static_cast<Uint32>(sizeof(constants)));
+        const MeshRange& range = meshRanges_[instance.meshIndex];
+        SDL_DrawGPUIndexedPrimitives(pass, range.indexCount, 1, range.firstIndex, 0, 0);
+    }
+
     if (!wireframe && glowPipeline_ != nullptr) {
         SDL_BindGPUGraphicsPipeline(pass, glowPipeline_);
         for (const GpuMeshInstance& instance : instances) {
@@ -1104,28 +1131,6 @@ bool GpuRenderer::renderFrame(
             SDL_DrawGPUIndexedPrimitives(pass, glowRange.indexCount, 1,
                                          glowRange.firstIndex, 0, 0);
         }
-    }
-
-    SDL_BindGPUGraphicsPipeline(pass, wireframe ? wireframePipeline_ : pipeline_);
-    for (const GpuMeshInstance& instance : instances) {
-        const SceneObject* object = instance.object;
-        if (object == nullptr || !object->visible || instance.meshIndex >= meshRanges_.size()) {
-            continue;
-        }
-        const Matrix4 model = modelMatrix(object->transform);
-        ObjectConstants constants{};
-        constants.model = model;
-        constants.mvp = multiply(viewProjection, model);
-        constants.normalMatrix = normalMatrix(object->transform);
-        constants.cameraPosition[0] = camera.x();
-        constants.cameraPosition[1] = camera.y();
-        constants.cameraPosition[2] = camera.z();
-        constants.cameraPosition[3] = 1.0F;
-        constants.materialFlags[0] = instance.meshIndex == 2U ? 1.0F : 0.0F;
-        SDL_PushGPUVertexUniformData(commandBuffer, 0, &constants,
-                                     static_cast<Uint32>(sizeof(constants)));
-        const MeshRange& range = meshRanges_[instance.meshIndex];
-        SDL_DrawGPUIndexedPrimitives(pass, range.indexCount, 1, range.firstIndex, 0, 0);
     }
 
     if (showTouchControls && overlayPipeline_ != nullptr) {
