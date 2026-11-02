@@ -1127,7 +1127,8 @@ bool GpuRenderer::renderFrame(
     bool showTouchControls, bool movementActive, float movementX, float movementY,
     float framesPerSecond, bool wireframe) {
     if (device_ == nullptr || window_ == nullptr || pipeline_ == nullptr ||
-        wireframePipeline_ == nullptr ||
+        wireframePipeline_ == nullptr || bloomPipeline_ == nullptr ||
+        bloomSampler_ == nullptr ||
         vertexBuffer_ == nullptr || indexBuffer_ == nullptr || meshRanges_.empty()) {
         lastError_ = "GPU renderer is not initialized";
         return false;
@@ -1399,6 +1400,10 @@ void GpuRenderer::drawOverlay(
 
 void GpuRenderer::shutdown() noexcept {
     if (device_ != nullptr) {
+        if (sceneColorTexture_ != nullptr) {
+            SDL_ReleaseGPUTexture(device_, sceneColorTexture_);
+            sceneColorTexture_ = nullptr;
+        }
         if (depthTexture_ != nullptr) {
             SDL_ReleaseGPUTexture(device_, depthTexture_);
             depthTexture_ = nullptr;
@@ -1406,6 +1411,10 @@ void GpuRenderer::shutdown() noexcept {
         if (multisampleColorTexture_ != nullptr) {
             SDL_ReleaseGPUTexture(device_, multisampleColorTexture_);
             multisampleColorTexture_ = nullptr;
+        }
+        if (bloomSampler_ != nullptr) {
+            SDL_ReleaseGPUSampler(device_, bloomSampler_);
+            bloomSampler_ = nullptr;
         }
         if (colorSampler_ != nullptr) {
             SDL_ReleaseGPUSampler(device_, colorSampler_);
@@ -1417,6 +1426,10 @@ void GpuRenderer::shutdown() noexcept {
         }
         depthWidth_ = 0;
         depthHeight_ = 0;
+        if (bloomPipeline_ != nullptr) {
+            SDL_ReleaseGPUGraphicsPipeline(device_, bloomPipeline_);
+            bloomPipeline_ = nullptr;
+        }
         if (overlayPipeline_ != nullptr) {
             SDL_ReleaseGPUGraphicsPipeline(device_, overlayPipeline_);
             overlayPipeline_ = nullptr;
