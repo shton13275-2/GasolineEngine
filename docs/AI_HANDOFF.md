@@ -625,3 +625,10 @@ CI:
 - When 4x MSAA is not supported, the renderer retains the existing single-sample swapchain path.
 - Multisample color/depth targets are recreated when the swapchain dimensions change and released during shutdown.
 - This source change requires its own Windows/iOS CI run. CI compilation does not verify Metal runtime support, visual edge quality, or performance on a physical iPhone.
+
+## Cyan scene styling
+
+- CPU renderer clear color is a dark cyan/blue sky tone; the procedural six-face cube uses cyan shades; the existing floor grid uses a brighter cyan color and retains the CPU depth buffer.
+- `src/main.cpp` creates a shared cyan floor plane mesh and `CyanFloor` scene object. The CPU renderer draws it with its existing mesh path and overlays the depth-tested floor grid. The GPU renderer uploads it as a third mesh and draws it as a scene instance.
+- GPU fragment shader applies a cyan tint, increased specular contribution, emissive cyan term, and view-angle rim highlight. This is shader-based emissive styling, not a bloom post-process.
+- The GPU clear color is a matching dark blue/cyan tone. Actual Metal appearance and performance remain unverified until tested on a physical iPhone.
