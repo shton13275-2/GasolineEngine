@@ -249,16 +249,16 @@ When the GPU backend is active, it renders a dedicated six-face cube mesh with p
 
 ### GPU multisample anti-aliasing
 
-The experimental SDL_GPU renderer checks runtime format and sample-count support for 4x MSAA on both its color and depth targets. When supported, the 3D scene and GPU overlay render into a multisample color target that resolves to the swapchain. Devices that do not support the required 4x formats retain the single-sample rendering path. Actual Metal rendering, edge quality, and performance must still be checked on a physical iPhone.
+The experimental SDL_GPU renderer checks runtime format and sample-count support for 4x MSAA on its scene color and depth targets. The scene resolves into a sampleable intermediate color texture, which is then composited with the screen-space bloom pass into the swapchain. Devices that do not support the required 4x formats retain the single-sample scene path. Actual Metal rendering, edge quality, bloom appearance, and performance must still be checked on a physical iPhone.
 
 ## Cyan scene lighting
 
-The CPU and experimental GPU renderers share a dark cyan sky, a cyan floor surface, and a bright cyan rotating cube. The CPU renderer overlays its existing depth-tested cyan floor grid; the GPU renderer draws the shared floor plane as scene geometry. The GPU mesh fragment shader adds an emissive cyan contribution and a view-angle rim highlight. This is an emissive shader treatment, not a full-screen bloom post-process. Physical iPhone appearance and performance still require device testing.
+The CPU and experimental GPU renderers share a dark cyan sky, a cyan floor surface, and a bright cyan rotating cube. The CPU renderer overlays its existing depth-tested cyan floor grid; the GPU renderer draws the shared floor plane as scene geometry. The GPU mesh fragment shader adds an emissive cyan contribution, and the full-screen composite adds a thresholded screen-space bloom effect. Physical iPhone appearance and performance still require device testing.
 
 
 ### GPU emissive point lighting
 
-The GPU renderer no longer draws an expanded cube shell for a silhouette rim. The rotating cube uses a uniformly emissive cyan material and acts as a moving point light. The embedded Metal shader calculates distance attenuation, diffuse response, and specular response from the cube's world position, so nearby surfaces such as the floor receive cyan illumination. This is a real-time lighting approximation, not ray tracing: it does not trace reflected or bounced light, and a screen-space bloom/blur post-process is not implemented. Physical iPhone appearance and Metal shader execution still require device verification.
+The GPU renderer no longer draws an expanded cube shell for a silhouette rim. The rotating cube uses a uniformly emissive cyan material and acts as a moving point light. The embedded Metal shader calculates distance attenuation, diffuse response, and specular response from the cube's world position, so nearby surfaces such as the floor receive cyan illumination. The scene renders to a sampleable intermediate color target before a full-screen bloom composite. The composite uses a 9-tap neighborhood filter, extracts bright samples with a luminance threshold, and adds a softened glow to the original scene. This is a lightweight screen-space bloom approximation, not HDR multi-pass blur or ray tracing; it does not trace reflected light or multiple light bounces. Physical iPhone appearance, Metal shader compilation, and performance still require device verification.
 
 
 ### Floor and cube color separation
