@@ -63,6 +63,9 @@ private:
     SDL_GPUGraphicsPipeline* pipeline_{nullptr};
     SDL_GPUGraphicsPipeline* wireframePipeline_{nullptr};
     SDL_GPUGraphicsPipeline* overlayPipeline_{nullptr};
+    SDL_GPUGraphicsPipeline* bloomPipeline_{nullptr};
+    SDL_GPUTexture* sceneColorTexture_{nullptr};
+    SDL_GPUSampler* bloomSampler_{nullptr};
     SDL_GPUBuffer* vertexBuffer_{nullptr};
     SDL_GPUBuffer* indexBuffer_{nullptr};
     SDL_GPUTexture* depthTexture_{nullptr};
