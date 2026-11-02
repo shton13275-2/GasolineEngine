@@ -254,3 +254,8 @@ The experimental SDL_GPU renderer checks runtime format and sample-count support
 ## Cyan scene lighting
 
 The CPU and experimental GPU renderers share a dark cyan sky, a cyan floor surface, and a bright cyan rotating cube. The CPU renderer overlays its existing depth-tested cyan floor grid; the GPU renderer draws the shared floor plane as scene geometry. The GPU mesh fragment shader adds an emissive cyan contribution and a view-angle rim highlight. This is an emissive shader treatment, not a full-screen bloom post-process. Physical iPhone appearance and performance still require device testing.
+
+
+### GPU cube glow
+
+The GPU renderer draws an additive cyan rim pass for the rotating cube before its opaque surface pass. The pass expands the cube slightly and blends a view-dependent cyan edge contribution; it is a lightweight silhouette glow, not a blurred bloom post-process. Wireframe mode skips this glow pass. Physical iPhone appearance still requires device verification.
