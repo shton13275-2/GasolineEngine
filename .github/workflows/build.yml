@@ -118,7 +118,7 @@ jobs:
               embeds: [{
                 title: "GasolineEngine — Detailed Build Report",
                 description: ("**Overall:** " +
-                  (if ([ $windows, $ios ] | all(. == "success")) then "SUCCESS" else "CHECK REQUIRED" end) +
+                  (if ($windows == "success") then "SUCCESS" else "CHECK REQUIRED" end) +
                   "\\n**Workflow:** " + $workflow +
                   "\\n**Branch:** " + $branch +
                   "\\n**Commit:** [" + ($commit[0:7]) + "](" + $url + ")" +
@@ -126,7 +126,7 @@ jobs:
                 color: (if ([ $windows, $ios ] | all(. == "success")) then 5763719 else 15548997 end),
                 fields: [
                   {name: "Windows", value: $windows, inline: true},
-                                    {name: "Triggered by", value: $actor, inline: true},
+                  {name: "Triggered by", value: $actor, inline: true},
                   {name: "Event", value: $event, inline: true},
                   {name: "Run", value: ("#" + $run + " / attempt " + $attempt), inline: true},
                   {name: "Build duration", value: $duration, inline: true},
