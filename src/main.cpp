@@ -8,6 +8,7 @@
 #include "engine/ObjMeshLoader.hpp"
 #include "engine/PpmImageLoader.hpp"
 #include "engine/PrimitiveMeshes.hpp"
+#include "engine/DemoCubeTransform.hpp"
 #include "engine/Scene.hpp"
 #include "engine/TouchOverlay.hpp"
 
@@ -293,9 +294,8 @@ int main(int argc, char* argv[]) {
             std::cerr << "[OriginalEngine] Could not create the second demo scene object.\n";
             exitCode = 1;
         }
-        originalengine::Transform gpuCubeTransform;
-        gpuCubeTransform.position = {0.0F, 0.0F, 6.0F};
-        gpuCubeTransform.scale = {1.25F, 1.25F, 1.25F};
+        const originalengine::Transform gpuCubeTransform =
+            originalengine::makeDemoCubeTransform(0.0);
         if (!scene.addObject("GpuRotatingCube", gpuCubeTransform)) {
             std::cerr << "[OriginalEngine] Could not create the GPU cube scene object.\n";
             exitCode = 1;
@@ -537,12 +537,8 @@ int main(int argc, char* argv[]) {
 
             if (gpuMode) {
                 if (gpuCubeObject != nullptr) {
-                    const float rotationTime = static_cast<float>(elapsedSeconds);
-                    gpuCubeObject->transform.rotation = {
-                        rotationTime * 0.55F,
-                        rotationTime * 0.80F,
-                        rotationTime * 0.35F
-                    };
+                    gpuCubeObject->transform =
+                        originalengine::makeDemoCubeTransform(elapsedSeconds);
                 }
                 std::string gpuFailure = "renderer unavailable";
                 const auto recovery = originalengine::runGpuFrameWithCpuFallback(

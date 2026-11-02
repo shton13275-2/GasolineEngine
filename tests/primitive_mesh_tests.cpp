@@ -1,4 +1,5 @@
 #include "engine/PrimitiveMeshes.hpp"
+#include "engine/DemoCubeTransform.hpp"
 
 #include <cassert>
 #include <cmath>
@@ -22,5 +23,20 @@ int main() {
             assert(index < cube.vertices.size());
         }
     }
+    const auto initial = originalengine::makeDemoCubeTransform(0.0);
+    assert(std::abs(initial.position.x) < 1.0e-6F);
+    assert(std::abs(initial.position.y) < 1.0e-6F);
+    assert(std::abs(initial.position.z - 4.2F) < 1.0e-6F);
+    assert(std::abs(initial.scale.x - 1.0F) < 1.0e-6F);
+    assert(std::abs(initial.scale.y - 1.0F) < 1.0e-6F);
+    assert(std::abs(initial.scale.z - 1.0F) < 1.0e-6F);
+    assert(std::abs(initial.rotation.x) < 1.0e-6F);
+    assert(std::abs(initial.rotation.y) < 1.0e-6F);
+    assert(std::abs(initial.rotation.z) < 1.0e-6F);
+
+    const auto animated = originalengine::makeDemoCubeTransform(1.0);
+    assert(std::abs(animated.rotation.x - std::sin(0.43F) * 0.28F) < 1.0e-6F);
+    assert(std::abs(animated.rotation.y - 0.65F) < 1.0e-6F);
+    assert(std::abs(animated.rotation.z - std::sin(0.31F) * 0.12F) < 1.0e-6F);
     return 0;
 }

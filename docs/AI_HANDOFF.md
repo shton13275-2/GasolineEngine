@@ -595,3 +595,11 @@ CI:
 - GPUモードで左右のピラミッド2個と3軸回転cubeを同じフレームに描画する。1/2キーの可視切替とSpaceによるcubeアニメーション停止は既存SceneObjectを共有する。
 - 全meshで同じP3 PPM textureを共有する。material別texture、GPU floor grid、wireframe、CPU HUD全機能のGPU移植はこの変更の対象外。
 - CIと実機Metal描画の確認状態はコミット後に追記する。
+
+
+### 2026-11-02 — CPU/GPUキューブTransform統一
+- CPUキューブの基準は中心(0, 0, 4.2)、半径1（各辺長2）、回転X=sin(t*0.43)*0.28、Y=t*0.65、Z=sin(t*0.31)*0.12。
+- GPU側にあった中心Z=6、scale=1.25、異なる回転速度がCPUと一致しない原因。
+- `makeDemoCubeTransform` を追加し、CPU/GPU双方が同じ経過時間から同じTransformを取得する。
+- primitive_meshesテストで初期位置・スケール・初期回転とt=1の回転式を検証。
+- 実機での見た目確認は未実施。CI結果は作業後に追記。

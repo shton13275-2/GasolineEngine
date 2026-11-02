@@ -1,4 +1,5 @@
 #include "engine/Renderer3D.hpp"
+#include "engine/DemoCubeTransform.hpp"
 
 #include "engine/Camera.hpp"
 #include "engine/Mesh.hpp"
@@ -605,16 +606,19 @@ bool Renderer3D::render(int width, int height, double elapsedSeconds,
     }};
 
     std::array<Vec3, 8> transformed{};
-    const float time = static_cast<float>(elapsedSeconds);
-    const float angleY = time * 0.65F;
-    const float angleX = std::sin(time * 0.43F) * 0.28F;
-    const float angleZ = std::sin(time * 0.31F) * 0.12F;
-
+    const Transform cubeTransform = makeDemoCubeTransform(elapsedSeconds);
     for (std::size_t i = 0; i < cube.size(); ++i) {
-        Vec3 p = rotateX(cube[i], angleX);
-        p = rotateY(p, angleY);
-        p = rotateZ(p, angleZ);
-        p.z += 4.2F;
+        Vec3 p{
+            cube[i].x * cubeTransform.scale.x,
+            cube[i].y * cubeTransform.scale.y,
+            cube[i].z * cubeTransform.scale.z
+        };
+        p = rotateX(p, cubeTransform.rotation.x);
+        p = rotateY(p, cubeTransform.rotation.y);
+        p = rotateZ(p, cubeTransform.rotation.z);
+        p.x += cubeTransform.position.x;
+        p.y += cubeTransform.position.y;
+        p.z += cubeTransform.position.z;
         transformed[i] = toCameraSpace(p, camera);
     }
 
