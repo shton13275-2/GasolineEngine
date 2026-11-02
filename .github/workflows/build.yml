@@ -40,3 +40,53 @@ jobs:
             build/Release/assets/demo_texture.ppm
           if-no-files-found: error
           retention-days: 14
+
+  discord-notify:
+    name: Discord Notification
+    runs-on: ubuntu-latest
+    needs: windows
+    if: always()
+    steps:
+      - name: Send build result to Discord
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          WINDOWS_RESULT: ${{ needs.windows.result }}
+          BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+          COMMIT_SHA: ${{ github.sha }}
+          ACTOR: ${{ github.actor }}
+          EVENT_NAME: ${{ github.event_name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        shell: bash
+        run: |
+          if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+            echo "::warning::DISCORD_WEBHOOK_URL is not configured. Discord notification skipped."
+            exit 0
+          fi
+
+          payload=$(jq -n \
+            --arg windows "$WINDOWS_RESULT" \
+            --arg branch "$BRANCH_NAME" \
+            --arg commit "$COMMIT_SHA" \
+            --arg actor "$ACTOR" \
+            --arg event "$EVENT_NAME" \
+            --arg url "$RUN_URL" \
+            '{
+              embeds: [{
+                title: "GasolineEngine Build Report",
+                description: "GitHub Actions build results",
+                color: (if $windows == "success" then 5763719 else 15548997 end),
+                fields: [
+                  {name: "Windows", value: $windows, inline: true},
+                  {name: "Branch", value: $branch, inline: true},
+                  {name: "Commit", value: $commit, inline: false},
+                  {name: "Triggered by", value: $actor, inline: true},
+                  {name: "Event", value: $event, inline: true}
+                ],
+                url: $url
+              }]
+            }')
+
+          curl --fail --silent --show-error \
+            -H "Content-Type: application/json" \
+            -d "$payload" \
+            "$DISCORD_WEBHOOK_URL"
