@@ -636,7 +636,7 @@ CI:
 
 ## GPU cube glow update
 
-A dedicated GPU glow pipeline is used for the rotating cube. It draws the same cube mesh at 1.16x scale with additive cyan blending and a view-dependent rim alpha before the opaque cube pass. This is a silhouette glow approximation, not blur-based bloom. Wireframe mode skips the glow pass. The pipeline is released during GpuRenderer shutdown. Physical iPhone/Metal appearance remains unverified.
+A dedicated GPU glow pipeline is used for the rotating cube. It draws the same cube mesh at 1.16x scale after the opaque scene pass, with front-face culling, depth testing, depth writes disabled, additive cyan blending, and a narrow low-alpha rim contribution. The opaque cube depth hides the expanded shell across the cube interior, leaving the outer silhouette rim. This is a silhouette glow approximation, not blur-based bloom. Wireframe mode skips the glow pass. The pipeline is released during GpuRenderer shutdown. Physical iPhone/Metal appearance remains unverified.
 
 
 ## Floor/cube color separation
