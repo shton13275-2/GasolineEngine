@@ -978,6 +978,58 @@ bool GpuRenderer::initialize(SDL_Window* window, const std::vector<const Mesh*>&
         shutdown();
         return false;
     }
+
+    SDL_GPUShaderCreateInfo bloomFragmentInfo{};
+    bloomFragmentInfo.code_size = std::strlen(bloomFragmentSource);
+    bloomFragmentInfo.code = reinterpret_cast<const Uint8*>(bloomFragmentSource);
+    bloomFragmentInfo.entrypoint = "bloom_fragment";
+    bloomFragmentInfo.format = SDL_GPU_SHADERFORMAT_MSL;
+    bloomFragmentInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
+    bloomFragmentInfo.num_samplers = 1;
+    SDL_GPUShader* bloomFragmentShader = SDL_CreateGPUShader(device_, &bloomFragmentInfo);
+    if (bloomFragmentShader == nullptr) {
+        setError("SDL_CreateGPUShader(bloom fragment)");
+        SDL_ReleaseGPUShader(device_, bloomVertexShader);
+        shutdown();
+        return false;
+    }
+
+    SDL_GPUColorTargetDescription bloomColorTarget{};
+    bloomColorTarget.format = SDL_GetGPUSwapchainTextureFormat(device_, window_);
+    SDL_GPUGraphicsPipelineCreateInfo bloomPipelineInfo{};
+    bloomPipelineInfo.vertex_shader = bloomVertexShader;
+    bloomPipelineInfo.fragment_shader = bloomFragmentShader;
+    bloomPipelineInfo.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+    bloomPipelineInfo.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
+    bloomPipelineInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
+    bloomPipelineInfo.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
+    bloomPipelineInfo.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_1;
+    bloomPipelineInfo.depth_stencil_state.enable_depth_test = false;
+    bloomPipelineInfo.depth_stencil_state.enable_depth_write = false;
+    bloomPipelineInfo.target_info.color_target_descriptions = &bloomColorTarget;
+    bloomPipelineInfo.target_info.num_color_targets = 1;
+    bloomPipeline_ = SDL_CreateGPUGraphicsPipeline(device_, &bloomPipelineInfo);
+    SDL_ReleaseGPUShader(device_, bloomFragmentShader);
+    SDL_ReleaseGPUShader(device_, bloomVertexShader);
+    if (bloomPipeline_ == nullptr) {
+        setError("SDL_CreateGPUGraphicsPipeline(bloom)");
+        shutdown();
+        return false;
+    }
+
+    SDL_GPUSamplerCreateInfo bloomSamplerInfo{};
+    bloomSamplerInfo.min_filter = SDL_GPU_FILTER_LINEAR;
+    bloomSamplerInfo.mag_filter = SDL_GPU_FILTER_LINEAR;
+    bloomSamplerInfo.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
+    bloomSamplerInfo.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    bloomSamplerInfo.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    bloomSamplerInfo.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    bloomSampler_ = SDL_CreateGPUSampler(device_, &bloomSamplerInfo);
+    if (bloomSampler_ == nullptr) {
+        setError("SDL_CreateGPUSampler(bloom)");
+        shutdown();
+        return false;
+    }
     return true;
 }
 
