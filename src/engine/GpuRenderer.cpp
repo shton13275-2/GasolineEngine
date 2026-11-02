@@ -1162,13 +1162,13 @@ bool GpuRenderer::renderFrame(
 
     SDL_GPUColorTargetInfo colorTarget{};
     colorTarget.texture = sampleCount_ == SDL_GPU_SAMPLECOUNT_1
-        ? swapchainTexture : multisampleColorTexture_;
+        ? sceneColorTexture_ : multisampleColorTexture_;
     colorTarget.clear_color = SDL_FColor{0.02F, 0.11F, 0.19F, 1.0F};
     colorTarget.load_op = SDL_GPU_LOADOP_CLEAR;
     colorTarget.store_op = sampleCount_ == SDL_GPU_SAMPLECOUNT_1
         ? SDL_GPU_STOREOP_STORE : SDL_GPU_STOREOP_RESOLVE;
     colorTarget.resolve_texture = sampleCount_ == SDL_GPU_SAMPLECOUNT_1
-        ? nullptr : swapchainTexture;
+        ? nullptr : sceneColorTexture_;
 
     SDL_GPUDepthStencilTargetInfo depthTarget{};
     depthTarget.texture = depthTexture_;
@@ -1236,12 +1236,30 @@ bool GpuRenderer::renderFrame(
         SDL_DrawGPUIndexedPrimitives(pass, range.indexCount, 1, range.firstIndex, 0, 0);
     }
 
+    SDL_EndGPURenderPass(pass);
+
+    SDL_GPUColorTargetInfo compositeTarget{};
+    compositeTarget.texture = swapchainTexture;
+    compositeTarget.clear_color = SDL_FColor{0.02F, 0.11F, 0.19F, 1.0F};
+    compositeTarget.load_op = SDL_GPU_LOADOP_CLEAR;
+    compositeTarget.store_op = SDL_GPU_STOREOP_STORE;
+    SDL_GPURenderPass* compositePass = SDL_BeginGPURenderPass(
+        commandBuffer, &compositeTarget, 1, nullptr);
+    if (compositePass == nullptr) {
+        setError("SDL_BeginGPURenderPass(bloom composite)");
+        (void)SDL_SubmitGPUCommandBuffer(commandBuffer);
+        return false;
+    }
+    SDL_BindGPUGraphicsPipeline(compositePass, bloomPipeline_);
+    const SDL_GPUTextureSamplerBinding sceneBinding{sceneColorTexture_, bloomSampler_};
+    SDL_BindGPUFragmentSamplers(compositePass, 0, &sceneBinding, 1);
+    SDL_DrawGPUPrimitives(compositePass, 3, 1, 0, 0);
     if (showTouchControls && overlayPipeline_ != nullptr) {
-        drawOverlay(commandBuffer, pass, width, height, movementActive, movementX, movementY,
+        drawOverlay(commandBuffer, compositePass, width, height, movementActive, movementX, movementY,
                     framesPerSecond);
     }
+    SDL_EndGPURenderPass(compositePass);
 
-    SDL_EndGPURenderPass(pass);
     if (!SDL_SubmitGPUCommandBuffer(commandBuffer)) {
         setError("SDL_SubmitGPUCommandBuffer");
         return false;
