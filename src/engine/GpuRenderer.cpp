@@ -98,16 +98,23 @@ fragment float4 main_fragment(
     const float3 sampledColor = input.hasTexCoord < 0.5
         ? input.color
         : baseColorTexture.sample(baseColorSampler, input.uv).rgb * input.color;
-    const float3 cyanTint = float3(0.12, 0.78, 1.0);
-    const float3 albedo = sampledColor * cyanTint;
     const float3 normal = normalize(input.normal);
+    const bool floorSurface = abs(normal.y) > 0.92;
+    const float3 cyanTint = floorSurface
+        ? float3(0.025, 0.20, 0.32)
+        : float3(0.12, 0.78, 1.0);
+    const float3 albedo = sampledColor * cyanTint;
     const float3 lightDirection = normalize(float3(-0.35, 0.8, -0.45));
     const float diffuse = max(dot(normal, lightDirection), 0.0);
     const float3 halfVector = normalize(lightDirection + normalize(input.viewDirection));
-    const float specular = pow(max(dot(normal, halfVector), 0.0), 32.0) * 0.35;
+    const float specular = pow(max(dot(normal, halfVector), 0.0), 32.0) *
+        (floorSurface ? 0.08 : 0.35);
     const float rim = pow(1.0 - max(dot(normal, normalize(input.viewDirection)), 0.0), 2.0);
-    const float3 emission = albedo * 0.72 + float3(0.02, 0.24, 0.34) * rim;
-    const float3 lighting = albedo * (0.18 + diffuse * 0.32) + emission + float3(specular);
+    const float3 emission = floorSurface
+        ? albedo * 0.10
+        : albedo * 0.72 + float3(0.02, 0.24, 0.34) * rim;
+    const float lightingStrength = floorSurface ? 0.28 : 0.50;
+    const float3 lighting = albedo * lightingStrength + emission + float3(specular);
     return float4(lighting, 1.0);
 }
 )metal";
