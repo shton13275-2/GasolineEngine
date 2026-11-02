@@ -1033,7 +1033,8 @@ bool GpuRenderer::initialize(SDL_Window* window, const std::vector<const Mesh*>&
 }
 
 bool GpuRenderer::createDepthTexture(Uint32 width, Uint32 height) {
-    if (depthTexture_ != nullptr && depthWidth_ == width && depthHeight_ == height &&
+    if (depthTexture_ != nullptr && sceneColorTexture_ != nullptr &&
+        depthWidth_ == width && depthHeight_ == height &&
         (sampleCount_ == SDL_GPU_SAMPLECOUNT_1 || multisampleColorTexture_ != nullptr)) {
         return true;
     }
