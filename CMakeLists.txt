@@ -144,4 +144,8 @@ if(BUILD_TESTING)
     add_executable(originalengine_gpu_frame_recovery_tests tests/gpu_frame_recovery_tests.cpp)
     target_link_libraries(originalengine_gpu_frame_recovery_tests PRIVATE originalengine)
     add_test(NAME gpu_frame_recovery COMMAND originalengine_gpu_frame_recovery_tests)
+
+    add_executable(originalengine_touch_overlay_tests tests/touch_overlay_tests.cpp)
+    target_link_libraries(originalengine_touch_overlay_tests PRIVATE originalengine)
+    add_test(NAME touch_overlay_hit_test COMMAND originalengine_touch_overlay_tests)
 endif()

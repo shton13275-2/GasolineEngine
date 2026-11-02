@@ -90,6 +90,7 @@ GitHubには少なくとも次のブランチが存在する。
 - 1/2でデモ用ピラミッドの表示切替。
 - -/+でマウス感度調整。
 - iOS: 左半分のドラッグ領域で移動、右半分のドラッグ領域で視点操作。両方同時操作できる設計。
+- CPU/GPU切替ボタンのタッチ判定は、CPU/GPU両方の描画に使う共通ボタン矩形から計算する。
 - iOS上のGPU/CPU切替ボタンはGPU/CPUバックエンドの切替要求に結び付けられている。ボタンの表示・タッチ判定の細部は最新コードで再確認すること。
 
 ### シーン・メッシュ
@@ -112,11 +113,11 @@ GitHubには少なくとも次のブランチが存在する。
 - CPU側Zバッファによる塗りつぶし三角形のピクセル単位深度判定。
 - フロアグリッドの描画と深度判定。
 - 透視補正付きUVテクスチャマッピング。
-- ASCII P3 PPMとBMPテクスチャの読み込み（iOSブランチREADMEの記述。実装と一致するか拡張時に再確認）。
+- ASCII P3 PPMとBMPテクスチャの読み込み。BMPは `SDL_LoadBMP` / `SDL_ConvertSurface` を使うCPU側ローダーで確認済み。
 - ソフトウェア描画サイズに上限を設け、SDLでウィンドウサイズに拡大表示する。
 - READMEには最大800×450（360,000ピクセル）と記載。定数変更時はREADMEも更新。
 - デバッグHUDにFPS推定値、カメラ座標、操作ヒントを表示。
-- ワイヤーフレームもCPU側Zバッファで深度判定するとのiOSブランチREADME記載。古いmainブランチREADMEにはワイヤーフレーム深度判定なしとあるため、対象ブランチのコードを優先する。
+- CPUワイヤーフレームは `SDL_RenderLine` で描画され、深度バッファによる遮蔽判定は行わない。塗りつぶし三角形とフロアグリッド線はCPU側Zバッファを使用する。
 
 ### 衝突判定
 - 静的AABB（軸平行境界ボックス）。
@@ -206,12 +207,14 @@ GitHubには少なくとも次のブランチが存在する。
 | `include/engine/Renderer3D.hpp` / `src/engine/Renderer3D.cpp` | CPUソフトウェアレンダラー |
 | `include/engine/TouchOverlay.hpp` | CPU/GPU共通のオーバーレイ配置・配色・bitmap font定義 |
 | `include/engine/GpuDeviceProbe.hpp` / `src/engine/GpuDeviceProbe.cpp` | SDL_GPU利用可否のProbe |
+| `include/engine/GpuFrameRecovery.hpp` | GPUフレーム失敗後のCPU復帰制御フロー |
+| `include/engine/GpuGeometryRules.hpp` | GPU三角形のUV有無判定ルール |
 | `include/engine/GpuRenderer.hpp` / `src/engine/GpuRenderer.cpp` | SDL_GPU indexed mesh、depth、PPM texture、lighting、overlay |
 | `shaders/Metal/` | iOS向けMSL shader source（まだmain.cppのGPU previewからは未使用） |
 | `shaders/Source/` | HLSL shader source |
 | `assets/demo.obj` | デモ用ピラミッド |
 | `assets/demo_texture.ppm` | デモ用テクスチャ |
-| `tests/` | カメラ、衝突、シーン、OBJ、Renderer等のテスト |
+| `tests/` | カメラ、衝突、シーン、OBJ、PPM、Renderer、GPU復旧、GPUジオメトリ、タッチオーバーレイのテスト |
 | `.github/workflows/build.yml` | Windows build/testとiOS unsigned IPA |
 
 ## 7. 操作方法
@@ -257,7 +260,7 @@ GitHubには少なくとも次のブランチが存在する。
 1. 作業開始時にブランチ/HEAD/差分を確認。
 2. Windows jobとiOS unsigned IPA jobの両方を成功させる。
 3. CPU rendererへのフォールバックを維持。
-4. GPU切替失敗、初期化失敗、終了時のリソース解放をテスト。
+4. GPUフレーム復旧のコールバック順序テストは `gpu_frame_recovery` で実施済み。実際のSDL_GPU障害注入、window claimの解放/再取得、実機Metal復旧は未検証。
 
 ### P1 — GPU texture/lightingの実機検証
 1. 最新iOS unsigned IPAを作成し、iPhone/LiveContainerで起動確認。
@@ -556,3 +559,12 @@ CI:
 - Added `tests/gpu_frame_recovery_tests.cpp` and the `gpu_frame_recovery` CTest target. It covers GPU success, successful CPU fallback, failed CPU fallback, and callback order.
 - The test validates control flow only. It does not inject a real SDL_GPU failure or verify SDL window-claim transitions, Metal runtime behavior, or physical iPhone recovery.
 - CI must run against this commit before this change is considered verified. Physical iPhone/LiveContainer testing remains outstanding.
+
+## Touch backend-switch hit-test and documentation corrections — 2026-11-02
+
+- Confirmed that the old touch hit region (`x >= 0.78`, `y <= 0.16`) was substantially larger than the visible backend-switch rectangle defined in `TouchOverlay.hpp`.
+- Added `touch_overlay::containsBackendButton`, deriving the normalized hit bounds from the same pixel constants used by both CPU and GPU overlay drawing. The right and bottom edges are exclusive.
+- Updated `src/main.cpp` to use the shared hit-test helper; button placement, dimensions, keyboard shortcut, and backend-switch behavior inside the visible rectangle are unchanged.
+- Added `touch_overlay_hit_test` coverage for landscape and portrait dimensions, inside/outside points, all rectangle edges, the previous overly broad hit region, and zero-sized viewports.
+- Corrected README and handoff statements: CPU wireframe lines are not depth-tested; CPU BMP texture loading is implemented through SDL_LoadBMP; the GPU frame-recovery control-flow test exists but does not inject a real SDL_GPU failure.
+- The new code must be verified by the workflow run for the resulting commit. Physical iPhone touch behavior and Metal rendering remain unverified.

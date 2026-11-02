@@ -30,7 +30,7 @@ For a complete, source-oriented handoff covering verified implementation status,
 - Filled triangles and floor-grid lines use a CPU-side Z-buffer for per-pixel visibility
 - Software filled rendering is capped at 360,000 pixels per frame and scaled by SDL, preventing high-DPI windows and resizing from causing unbounded CPU and memory use
 - World-space perspective floor grid that responds to camera movement and is occluded by nearer geometry
-- GitHub Actions builds the Windows executable, runs camera, collision, scene-management, OBJ-loader, PPM image, software-renderer, and GPU geometry-rule and GPU frame-recovery unit tests plus a rendering smoke test, and uploads the executable as an artifact
+- GitHub Actions builds the Windows executable, runs camera, collision, scene-management, OBJ-loader, PPM image, software-renderer, GPU geometry-rule, GPU frame-recovery, and touch-overlay hit-test unit tests plus a rendering smoke test, and uploads the executable as an artifact
 
 > The CPU renderer is an initial CPU-side projection and SDL rasterization prototype, not a modern GPU 3D pipeline. Filled triangles and floor-grid lines use a CPU-side depth buffer; wireframe mode is still drawn as SDL lines without depth testing. Geometry crossing the near plane is clipped instead of being discarded wholesale. To keep frame time and memory bounded when a shape fills the view or the window is high-DPI, filled rendering uses at most 800 x 450 pixels and SDL scales it to the window. The separate experimental GPU backend is described below.
 
@@ -50,6 +50,7 @@ For a complete, source-oriented handoff covering verified implementation status,
 - **Right mouse button:** capture/release the mouse for looking around
 - **Mouse movement:** look around while captured
 - **iPhone/iPad touch:** drag on the left half to move; drag on the right half to look around. Both can be used simultaneously.
+- The on-screen CPU/GPU switch responds only inside its visible button rectangle.
 - **Esc:** release the mouse; press again to exit
 
 The top-left debug overlay displays a smoothed FPS estimate, camera position (X/Y/Z), mouse-look sensitivity, and a reminder of the main controls. F3 switches the cube and loaded OBJ meshes between filled polygons and wireframe outlines. Filled 3D triangles and floor-grid lines use a CPU-side Z-buffer, so nearer surfaces win per pixel instead of relying only on polygon draw order. Wireframe lines are not depth-tested yet. It uses SDL3's built-in debug text renderer, so no font or SDL_ttf asset is required.
@@ -152,12 +153,13 @@ Gasoline Engine は、C++20 を基盤として開発しているクロスプラ�
 - カメラの移動に応じて見え方が変わり、近いメッシュに隠れる、ワールド座標系の透視投影フロアグリッド
 - ソフトウェア描画は 1 フレームあたり 360,000 ピクセルに制限され、SDL により拡大表示されるため、高 DPI ウィンドウやリサイズで CPU・メモリ使用量が無制限に増加しない
 - 塗りつぶしポリゴンとフロアグリッド線に対応した CPU 側 Z バッファによるピクセル単位の奥行き判定
-- GitHub Actions による Windows 実行ファイルのビルド、カメラ・衝突判定・シーン管理・OBJ ローダー・PPM 画像・ソフトウェアレンダラー・GPU ジオメトリ判定のユニットテスト、描画スモークテスト、および成果物のアップロード
+- GitHub Actions による Windows 実行ファイルのビルド、カメラ・衝突判定・シーン管理・OBJ ローダー・PPM 画像・ソフトウェアレンダラー・GPU ジオメトリ判定・GPU フレーム復旧・タッチボタンのヒット判定のユニットテスト、描画スモークテスト、および成果物のアップロード
 
 > CPU 側には透視投影、Z バッファ、透視補正付き UV テクスチャ描画、近接平面クリッピング、ワイヤーフレームに対応したソフトウェアレンダラーがあります。別経路の実験的な SDL_GPU レンダラーもあり、OBJ メッシュ、シーンオブジェクト、深度テスト、P3 PPM テクスチャ、ライティング、タッチオーバーレイを描画します。GPU 経路は MSL を使用し、iPhone 実機での Metal 動作は未確認です。
 
 ## カメラ操作
 
+- **iPhone/iPad の切替ボタン：** 表示されている CPU/GPU ボタンの矩形内をタップすると描画バックエンドを切り替えます。
 - **W / S：** 前進 / 後退
 - **A / D：** 左右に平行移動
 - **Q / E：** 下 / 上に移動
@@ -168,13 +170,13 @@ Gasoline Engine は、C++20 を基盤として開発しているクロスプラ�
 - **マウス移動：** マウス捕捉中に視点を操作
 - **Esc：** マウス捕捉を解除。もう一度押すと終了
 
-画面左上のデバッグ HUD には、平滑化した FPS の推定値、カメラ座標（X/Y/Z）、主な操作方法が表示されます。塗りつぶしポリゴン、フロアグリッド線、ワイヤーフレーム線は CPU 側の Z バッファで奥行き判定されます。SDL3 標準のデバッグ文字描画機能を使うため、フォントファイルや SDL_ttf は必要ありません。
+画面左上のデバッグ HUD には、平滑化した FPS の推定値、カメラ座標（X/Y/Z）、主な操作方法が表示されます。塗りつぶしポリゴンとフロアグリッド線は CPU 側の Z バッファで奥行き判定されます。ワイヤーフレーム線はまだ深度判定されません。SDL3 標準のデバッグ文字描画機能を使うため、フォントファイルや SDL_ttf は必要ありません。
 
 ## OBJ メッシュローダー（試作）
 
 `ObjMeshLoader` は Wavefront OBJ の `v`（頂点）と `f`（面）レコードを読み込みます。多角形の面を三角形に分割し、正の頂点インデックスと負の頂点インデックスの両方に対応します。OBJ の UV 座標を使った透視補正付きのピクセル単位テクスチャ描画に対応しました。現時点では ASCII 形式の P3 PPM と BMP テクスチャを読み込み、CPU 側の Z バッファと既存の頂点ライティングを維持します。MTL マテリアル解析や PNG/JPEG のデコードは未実装です。面のインデックスを検証し、UVインデックスのない不正な末尾スラッシュ形式も拒否します。読み込みに失敗した場合は呼び出し元の既存メッシュを変更しません。
 
-同梱の `assets/demo.obj` にあるピラミッドは一度読み込まれ、デモシーン内の 2 つのオブジェクトで共有されます。表示状態のオブジェクトは、それぞれの位置・回転・拡大縮小を反映して描画されます。非表示に設定されたオブジェクトは描画されません。OBJ の UV 座標を使った透視補正付きのピクセル単位テクスチャ描画に対応しました。現時点では ASCII 形式の P3 PPM テクスチャを読み込み、CPU 側の Z バッファと既存の頂点ライティングを維持します。MTL マテリアル解析や PNG/JPEG/BMP のデコードは未実装です。カメラの近接平面を横切る三角形は、投影の前にカメラ座標系でクリッピングされます。
+同梱の `assets/demo.obj` にあるピラミッドは一度読み込まれ、デモシーン内の 2 つのオブジェクトで共有されます。表示状態のオブジェクトは、それぞれの位置・回転・拡大縮小を反映して描画されます。非表示に設定されたオブジェクトは描画されません。OBJ の UV 座標を使った透視補正付きのピクセル単位テクスチャ描画に対応しました。現時点では ASCII 形式の P3 PPM と BMP テクスチャを読み込み、CPU 側の Z バッファと既存の頂点ライティングを維持します。MTL マテリアル解析や PNG/JPEG のデコードは未実装です。カメラの近接平面を横切る三角形は、投影の前にカメラ座標系でクリッピングされます。
 
 ## 衝突判定（試作）
 

@@ -335,7 +335,10 @@ int main(int argc, char* argv[]) {
                     (event.type == SDL_EVENT_FINGER_DOWN || event.type == SDL_EVENT_FINGER_MOTION ||
                      event.type == SDL_EVENT_FINGER_UP)) {
                     if (event.type == SDL_EVENT_FINGER_DOWN) {
-                        if (event.tfinger.x >= 0.78F && event.tfinger.y <= 0.16F) {
+                        if (originalengine::touch_overlay::containsBackendButton(
+                                event.tfinger.x, event.tfinger.y,
+                                static_cast<float>(touchWidth),
+                                static_cast<float>(touchHeight))) {
                             backendToggleRequested = true;
                         } else if (event.tfinger.x < 0.5F && !hasMovementFinger) {
                             movementFinger = event.tfinger.fingerID;

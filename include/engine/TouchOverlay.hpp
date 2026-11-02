@@ -28,6 +28,23 @@ inline constexpr float fontPixelSize = 2.0F;
 inline constexpr float fontAdvance = 12.0F;
 inline constexpr float fontHeight = 10.0F;
 
+// Tests normalized SDL finger coordinates against the visible backend-switch
+// rectangle. The right and bottom edges are exclusive, matching pixel bounds.
+inline constexpr bool containsBackendButton(
+    float normalizedX, float normalizedY,
+    float viewportWidth, float viewportHeight) noexcept {
+    if (viewportWidth <= 0.0F || viewportHeight <= 0.0F) {
+        return false;
+    }
+    const float left = (viewportWidth - backendButtonRight - backendButtonWidth) /
+                       viewportWidth;
+    const float right = (viewportWidth - backendButtonRight) / viewportWidth;
+    const float top = backendButtonY / viewportHeight;
+    const float bottom = (backendButtonY + backendButtonHeight) / viewportHeight;
+    return normalizedX >= left && normalizedX < right &&
+           normalizedY >= top && normalizedY < bottom;
+}
+
 struct Color {
     std::uint8_t r;
     std::uint8_t g;
