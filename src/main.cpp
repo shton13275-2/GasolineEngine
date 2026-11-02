@@ -278,6 +278,13 @@ int main(int argc, char* argv[]) {
         }
         writeDiagnostic("Stage: OBJ load completed");
         originalengine::Mesh gpuCubeMesh = originalengine::makeTexturedCubeMesh();
+        // Shared cyan floor plane; CPU draws its depth-tested grid over the surface.
+        originalengine::Mesh floorMesh;
+        floorMesh.vertices = {
+            {-20.0F, -1.5F, -20.0F}, {-20.0F, -1.5F, 40.0F},
+            {20.0F, -1.5F, 40.0F}, {20.0F, -1.5F, -20.0F}
+        };
+        floorMesh.triangles = {{{0, 1, 2}}, {{0, 2, 3}}};
         originalengine::Scene scene;
         originalengine::Transform demoTransform;
         demoTransform.position = {2.6F, -0.2F, 7.0F};
@@ -300,27 +307,36 @@ int main(int argc, char* argv[]) {
             std::cerr << "[OriginalEngine] Could not create the GPU cube scene object.\n";
             exitCode = 1;
         }
+        originalengine::Transform floorTransform;
+        if (!scene.addObject("CyanFloor", floorTransform)) {
+            std::cerr << "[OriginalEngine] Could not create the floor scene object.\n";
+            exitCode = 1;
+        }
 
         // Resolve object pointers after all additions so vector reallocation cannot invalidate them.
         originalengine::SceneObject* demoObject = scene.findObject("DemoPyramid");
         originalengine::SceneObject* leftObject = scene.findObject("DemoPyramidLeft");
         originalengine::SceneObject* gpuCubeObject = scene.findObject("GpuRotatingCube");
-        if (demoObject == nullptr || leftObject == nullptr || gpuCubeObject == nullptr) {
+        originalengine::SceneObject* floorObject = scene.findObject("CyanFloor");
+        if (demoObject == nullptr || leftObject == nullptr || gpuCubeObject == nullptr || floorObject == nullptr) {
             std::cerr << "[OriginalEngine] A demo scene object was not found.\n";
             exitCode = 1;
         }
         const std::vector<originalengine::MeshInstance> meshInstances{
             {&demoMesh, demoObject, texturePath.string()},
-            {&demoMesh, leftObject, texturePath.string()}
+            {&demoMesh, leftObject, texturePath.string()},
+            {&floorMesh, floorObject, {}}
         };
         const std::vector<const originalengine::Mesh*> gpuMeshes{
             &demoMesh,
-            &gpuCubeMesh
+            &gpuCubeMesh,
+            &floorMesh
         };
         const std::vector<originalengine::GpuMeshInstance> gpuSceneObjects{
             {0, demoObject},
             {0, leftObject},
-            {1, gpuCubeObject}
+            {1, gpuCubeObject},
+            {2, floorObject}
         };
         // Conservative static bounds around the demo cube.
         collisionWorld.addObstacle({-1.4F, -1.4F, 2.8F, 1.4F, 1.4F, 5.6F});
