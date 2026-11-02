@@ -192,6 +192,8 @@ GitHubには少なくとも次のブランチが存在する。
   - IPA integrity / bundle contents verify
   - artifact upload
 - 実際のworkflow runとjob結果は作業のたびにGitHub Actionsで確認する。古い成功runを最新変更の成功として扱わない。
+- Discord通知は `ios/initial-support` のワークフローだけで送信する。`main` ではDiscord通知jobを実行しない。
+- iOS側のDiscord通知jobはWindowsとiOSの両jobに依存し、iOS unsigned IPA jobが成功した場合にのみ実行する。通知本文にはWindows/iOS両方の結果を含める。Windowsが失敗した場合もiOSが成功すれば結果をまとめて通知する。
 
 ## 6. ディレクトリと主要ファイル
 
