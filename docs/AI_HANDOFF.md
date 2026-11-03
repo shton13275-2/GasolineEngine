@@ -685,3 +685,11 @@ The earlier implementation drew an expanded cube shell at 1.16x scale with front
 - Updated `.github/workflows/build.yml` to exclude the notification job from its own report, use actual newline characters, cap the details field at 1,000 characters, cap the description, and validate embed field/count/total-length limits before sending.
 - Changed curl to `--fail-with-body` so a future Discord HTTP error includes the response body in the Actions log.
 - The fix requires a new workflow run. Do not consider Discord delivery fixed until that run's Discord Notification job succeeds. Run #317's Windows and iOS jobs were both successful; its overall workflow failed only at notification delivery.
+
+
+## GPU bloom and soft floor shadow — 2026-11-03
+
+- Replaced the 9-tap bloom cross with a 13-tap kernel using diagonal and wider-radius samples. The highlight threshold was lowered slightly and the glow contribution increased to spread cyan highlights farther without adding render targets or extra passes.
+- Added an analytic soft elliptical shadow to the GPU floor fragment shader. Its center is projected from the rotating cube's world position opposite the directional light; the edge is softened with smoothstep and opacity is partial.
+- This is a floor-only approximation, not a depth shadow map: it does not create shadows on arbitrary objects or account for occluders. The bloom remains a single-pass screen-space approximation, not HDR multi-pass Gaussian blur or ray tracing.
+- The embedded MSL is not compiled by the normal C++ CI build. Verify the resulting Windows/iOS workflow and then inspect the IPA on a physical iPhone for Metal shader compilation, shadow placement, bloom appearance, and performance before claiming runtime success.
