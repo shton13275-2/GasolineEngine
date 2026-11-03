@@ -945,9 +945,10 @@ bool Renderer3D::render(int width, int height, double elapsedSeconds,
     (void)SDL_RenderDebugText(renderer_, 12.0F, 44.0F, sensitivityText);
     char statsText[128]{};
     const std::size_t visibleObjects = static_cast<std::size_t>(std::count_if(
-        meshInstances.begin(), meshInstances.end(), [](const MeshInstance& instance) {
-            return instance.mesh != nullptr && instance.object != nullptr &&
-                   instance.object->visible && !instance.mesh->empty();
+        renderItems.begin(), renderItems.end(), [](const SceneRenderItem& instance) {
+            return instance.renderOnCpu && instance.mesh != nullptr &&
+                   instance.object != nullptr && instance.object->visible &&
+                   !instance.mesh->empty();
         }));
     std::snprintf(statsText, sizeof(statsText),
                   "Triangles: %zu  Culled: %zu  Objects: %zu  Render: %dx%d",
