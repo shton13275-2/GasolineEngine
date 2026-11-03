@@ -333,32 +333,76 @@ fragment float4 bloom_fragment(
         // The current prepass stores depth only, so this first SSR stage
         // focuses on near-horizontal surfaces (the demo floor) and uses a
         // conservative fixed roughness response.
-        const float surfaceMask = smoothstep(0.62, 0.92, abs(normal.y));
+        const float surfaceMask = smoothstep(0.82, 0.97, abs(normal.y));
         const float3 incident = -viewDirection;
         const float3 reflectedDirection = normalize(reflect(incident, normal));
-        float3 rayPosition = worldPosition + normal * 0.035;
+        // Offset away from the source surface and skip the near-field region
+        // where adjacent depth discontinuities otherwise create false hits.
+        const float3 rayOrigin = worldPosition + normal * 0.075;
         const float edgeFade = min(min(uv.x, 1.0 - uv.x), min(uv.y, 1.0 - uv.y));
-        const float screenFade = smoothstep(0.015, 0.12, edgeFade);
+        const float screenFade = smoothstep(0.025, 0.14, edgeFade);
+        float previousRayDepth = centerDepth;
+        float previousRayDistance = 0.0;
+        float2 hitUV = float2(0.0);
+        bool hitFound = false;
 
-        for (uint step = 1; step <= 24; ++step) {
-            const float distanceAlongRay = 0.10 * float(step);
-            const float3 samplePosition = rayPosition + reflectedDirection * distanceAlongRay;
+        for (uint step = 1; step <= 32; ++step) {
+            const float distanceAlongRay = 0.22 + 0.075 * float(step - 1);
+            const float3 samplePosition = rayOrigin + reflectedDirection * distanceAlongRay;
             const float4 clip = constants.viewProjection * float4(samplePosition, 1.0);
             if (clip.w <= 0.001) break;
             const float3 projected = clip.xyz / clip.w;
             const float2 sampleUV = float2(projected.x * 0.5 + 0.5, 0.5 - projected.y * 0.5);
-            if (any(sampleUV <= float2(0.002)) || any(sampleUV >= float2(0.998)) ||
+            if (any(sampleUV <= float2(0.003)) || any(sampleUV >= float2(0.997)) ||
                 projected.z <= 0.0 || projected.z >= 1.0) break;
 
             const float sceneDepth = depthTexture.sample(depthSampler, sampleUV).r;
-            if (sceneDepth < 0.999 && projected.z > sceneDepth + 0.0015 &&
-                projected.z - sceneDepth < 0.018) {
-                reflectionColor = sceneTexture.sample(sceneSampler, sampleUV).rgb;
-                const float distanceFade = 1.0 - float(step) / 30.0;
-                reflectionWeight = surfaceMask * screenFade *
-                    clamp(distanceFade, 0.0, 1.0) * 0.28;
-                break;
+            if (sceneDepth < 0.999) {
+                const float depthDelta = projected.z - sceneDepth;
+                // Require a genuine front-to-back crossing. A single loose
+                // depth-thickness test caused nearby silhouettes to appear as
+                // stacked reflection layers directly below the source object.
+                if (depthDelta > 0.0008 && previousRayDepth <= sceneDepth + 0.0008 &&
+                    depthDelta < 0.006) {
+                    // Refine the first crossing to reduce coarse-step false hits.
+                    float lowDistance = previousRayDistance;
+                    float highDistance = distanceAlongRay;
+                    float2 refinedUV = sampleUV;
+                    for (uint refine = 0; refine < 4; ++refine) {
+                        const float middleDistance = (lowDistance + highDistance) * 0.5;
+                        const float3 middlePosition = rayOrigin + reflectedDirection * middleDistance;
+                        const float4 middleClip = constants.viewProjection * float4(middlePosition, 1.0);
+                        if (middleClip.w <= 0.001) break;
+                        const float3 middleProjected = middleClip.xyz / middleClip.w;
+                        const float2 middleUV = float2(
+                            middleProjected.x * 0.5 + 0.5, 0.5 - middleProjected.y * 0.5);
+                        if (any(middleUV <= float2(0.003)) || any(middleUV >= float2(0.997))) break;
+                        const float middleSceneDepth = depthTexture.sample(depthSampler, middleUV).r;
+                        if (middleSceneDepth < 0.999 &&
+                            middleProjected.z > middleSceneDepth + 0.0008) {
+                            highDistance = middleDistance;
+                            refinedUV = middleUV;
+                        } else {
+                            lowDistance = middleDistance;
+                        }
+                    }
+                    hitUV = refinedUV;
+                    hitFound = true;
+                    break;
+                }
+                previousRayDepth = projected.z;
+                previousRayDistance = distanceAlongRay;
+            } else {
+                previousRayDepth = projected.z;
+                previousRayDistance = distanceAlongRay;
             }
+        }
+
+        if (hitFound) {
+            reflectionColor = sceneTexture.sample(sceneSampler, hitUV).rgb;
+            const float distanceFade = 1.0 - clamp(previousRayDistance / 3.0, 0.0, 1.0);
+            reflectionWeight = surfaceMask * screenFade *
+                distanceFade * 0.22;
         }
     }
 
