@@ -701,3 +701,13 @@ The earlier implementation drew an expanded cube shell at 1.16x scale with front
 - Non-emissive non-floor meshes now have zero material emission and use ambient + directional + attenuated point-light shading. The cube retains strong cyan emission.
 - Reduced bloom to a 9-tap cross, moved threshold to `smoothstep(0.82, 1.20, brightness)`, and lowered composite gain to 0.55. This is intended to keep the halo closer to the cube and reduce washout.
 - This corrects the identified material-emission logic; it does not implement a general shadow map or physically based global illumination. Validate the actual MSL runtime compilation and visual result on a physical iPhone after CI.
+
+
+## Shared CPU/GPU scene render items — 2026-11-03
+
+- Added `SceneRenderItem` as the common render-item record containing the mesh pointer, SceneObject pointer, CPU texture path, GPU mesh-range index, and explicit CPU/GPU participation flags.
+- The sample application now builds one `renderItems` vector and passes it to both renderers. The CPU renderer skips items not marked for CPU; the GPU renderer skips items not marked for GPU. This removes the duplicated CPU `MeshInstance` and GPU `GpuMeshInstance` lists from the application.
+- The dedicated GPU cube is marked GPU-only so it does not get drawn again by the CPU mesh path. Existing CPU procedural cube rendering remains unchanged.
+- Added the `scene_render_items` CTest to verify shared mesh/object/texture/index bindings and CPU-only/GPU-only flags.
+- This is shared scene-render-item data, not yet a unified renderer interface or a complete parity of CPU/GPU features. The GPU mesh upload table remains a backend resource list.
+- Verify the matching Windows and iOS GitHub Actions jobs before considering the change build-verified. Physical iPhone Metal rendering remains a separate manual check.
