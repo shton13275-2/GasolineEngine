@@ -711,3 +711,12 @@ The earlier implementation drew an expanded cube shell at 1.16x scale with front
 - Added the `scene_render_items` CTest to verify shared mesh/object/texture/index bindings and CPU-only/GPU-only flags.
 - This is shared scene-render-item data, not yet a unified renderer interface or a complete parity of CPU/GPU features. The GPU mesh upload table remains a backend resource list.
 - Verify the matching Windows and iOS GitHub Actions jobs before considering the change build-verified. Physical iPhone Metal rendering remains a separate manual check.
+
+
+## GPU metallic-roughness PBR — 2026-11-03
+
+- Added `metallic` and `roughness` fields to the common `SceneRenderItem`. These fields are backend-neutral scene material data; the CPU renderer leaves them unused while the GPU renderer clamps and uploads them in the existing per-object material uniform.
+- Replaced GPU Blinn-Phong direct lighting with a forward Cook-Torrance implementation: GGX normal distribution, Smith-Schlick geometry, and Schlick Fresnel. Both directional and attenuated point-light contributions use the BRDF. Ambient and emissive contributions remain separate.
+- Set demo values explicitly: pyramid 0.05/0.72, emissive cube 0.35/0.24, floor 0.0/0.92 (metallic/roughness).
+- Extended the shared-scene-item test to verify material values and defaults.
+- This is the first PBR stage. Environment-map/image-based lighting, normal maps, tone mapping, and distinct GPU texture/material resources remain unimplemented. CI does not compile the embedded MSL at runtime; actual Metal shader compilation and visual validation require a physical iPhone.
