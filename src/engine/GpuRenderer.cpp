@@ -291,7 +291,13 @@ fragment float4 bloom_fragment(
         const float threshold = smoothstep(0.82, 1.20, brightness);
         glow += sampleColor * threshold * weights[index];
     }
-    return float4(base + glow * 0.55, 1.0);
+    const float3 hdrColor = base + glow * 0.55;
+    // ACES fitted tone mapping converts the floating-point scene target to
+    // the display-referred swapchain without clipping highlights abruptly.
+    const float3 numerator = hdrColor * (2.51 * hdrColor + 0.03);
+    const float3 denominator = hdrColor * (2.43 * hdrColor + 0.59) + 0.14;
+    const float3 mapped = clamp(numerator / max(denominator, 0.0001), 0.0, 1.0);
+    return float4(mapped, 1.0);
 }
 )metal";
 
@@ -752,10 +758,19 @@ bool GpuRenderer::initialize(SDL_Window* window, const std::vector<const Mesh*>&
     }
 
     const SDL_GPUTextureFormat swapchainFormat = SDL_GetGPUSwapchainTextureFormat(device_, window_);
+    sceneColorFormat_ = SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT;
+    const SDL_GPUTextureUsageFlags hdrUsage =
+        SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    if (!SDL_GPUTextureSupportsFormat(device_, sceneColorFormat_,
+            SDL_GPU_TEXTURETYPE_2D, hdrUsage)) {
+        // Some devices cannot sample a floating-point render target. Keep the
+        // original swapchain-format path rather than failing GPU initialization.
+        sceneColorFormat_ = swapchainFormat;
+    }
     sampleCount_ = SDL_GPU_SAMPLECOUNT_1;
-    if (SDL_GPUTextureSupportsFormat(device_, swapchainFormat, SDL_GPU_TEXTURETYPE_2D,
+    if (SDL_GPUTextureSupportsFormat(device_, sceneColorFormat_, SDL_GPU_TEXTURETYPE_2D,
             SDL_GPU_TEXTUREUSAGE_COLOR_TARGET) &&
-        SDL_GPUTextureSupportsSampleCount(device_, swapchainFormat, SDL_GPU_SAMPLECOUNT_4) &&
+        SDL_GPUTextureSupportsSampleCount(device_, sceneColorFormat_, SDL_GPU_SAMPLECOUNT_4) &&
         SDL_GPUTextureSupportsSampleCount(device_, depthFormat_, SDL_GPU_SAMPLECOUNT_4)) {
         sampleCount_ = SDL_GPU_SAMPLECOUNT_4;
     }
@@ -937,7 +952,7 @@ bool GpuRenderer::initialize(SDL_Window* window, const std::vector<const Mesh*>&
     };
 
     SDL_GPUColorTargetDescription colorTarget{};
-    colorTarget.format = SDL_GetGPUSwapchainTextureFormat(device_, window_);
+    colorTarget.format = sceneColorFormat_;
 
     SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
     pipelineInfo.vertex_shader = vertexShader;
@@ -1135,7 +1150,7 @@ bool GpuRenderer::createDepthTexture(Uint32 width, Uint32 height) {
 
     SDL_GPUTextureCreateInfo sceneColorInfo{};
     sceneColorInfo.type = SDL_GPU_TEXTURETYPE_2D;
-    sceneColorInfo.format = SDL_GetGPUSwapchainTextureFormat(device_, window_);
+    sceneColorInfo.format = sceneColorFormat_;
     sceneColorInfo.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
     sceneColorInfo.width = width;
     sceneColorInfo.height = height;
@@ -1164,7 +1179,7 @@ bool GpuRenderer::createDepthTexture(Uint32 width, Uint32 height) {
     if (sampleCount_ != SDL_GPU_SAMPLECOUNT_1) {
         SDL_GPUTextureCreateInfo colorInfo{};
         colorInfo.type = SDL_GPU_TEXTURETYPE_2D;
-        colorInfo.format = SDL_GetGPUSwapchainTextureFormat(device_, window_);
+        colorInfo.format = sceneColorFormat_;
         colorInfo.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET;
         colorInfo.width = width;
         colorInfo.height = height;
@@ -1527,6 +1542,7 @@ void GpuRenderer::shutdown() noexcept {
         device_ = nullptr;
     }
     depthFormat_ = SDL_GPU_TEXTUREFORMAT_INVALID;
+    sceneColorFormat_ = SDL_GPU_TEXTUREFORMAT_INVALID;
     sampleCount_ = SDL_GPU_SAMPLECOUNT_1;
     meshRanges_.clear();
 }
