@@ -788,3 +788,9 @@ GPU shadow target format fallback — 2026-11-03
 - The demo scene's only intended reflective surface is the explicit floor mesh at world Y = -1.5. SSR now uses that known plane and a fixed upward normal instead of treating every screen-space near-horizontal surface as reflective.
 - This prevents horizontal faces of the rotating cube and other mesh facets from being selected as reflection receivers. Reflection hit tracing still uses the camera-depth prepass and retains normal SSR screen-space limitations.
 - This is source-level only; Metal runtime compilation and the visual result require a new IPA and physical-device verification.
+
+
+### SSR ray-march density correction — 2026-11-04
+
+- Increased the screen-space reflection march from 32 to 64 samples and reduced world-space spacing from 0.075 to 0.035, with a 0.12 near-origin offset. The maximum trace distance remains approximately 2.3 world units.
+- This targets discontinuous/combed reflection silhouettes caused by coarse ray steps. It does not change the depth reconstruction or intersection model; visual improvement and iPhone GPU cost still require device verification.
