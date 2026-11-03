@@ -317,3 +317,11 @@ The directional shadow map prefers `R32_FLOAT` when the GPU supports it as a sam
 - The final screen-space composite samples that depth texture and evaluates eight neighboring depth samples. Samples that are closer than the current pixel reduce ambient visibility; the result modulates scene color before the existing bloom and ACES-fitted tone mapping.
 - This is a lightweight depth-neighborhood SSAO approximation. It does not reconstruct full view-space positions/normals, use a hemisphere kernel, or implement temporal filtering. The depth pass adds an extra geometry pass and two screen-sized textures.
 - Embedded MSL compilation, Metal texture sampling, visual quality, and iPhone performance still require physical-device verification. CI compilation alone does not validate the shader runtime.
+
+
+## GPU screen-space reflections (SSR) — 2026-11-03
+
+- Added a screen-space reflection ray-march to the GPU fullscreen composite. It reconstructs world positions from the camera-depth prepass, estimates normals from neighboring depth samples, reflects the view ray, and searches up to 24 projected steps for visible scene-depth intersections.
+- The first implementation intentionally focuses on near-horizontal surfaces (the demo floor), uses a conservative fixed reflection strength, and fades hits near screen edges and at longer ray distances. It reuses the existing scene-color and depth textures; no additional render target or geometry pass is added.
+- Because the current prepass stores depth only, this version does not read per-pixel PBR roughness/metallic values and does not produce reflections for off-screen or occluded objects. Screen-space edge/disocclusion artifacts are inherent limitations.
+- Existing SSAO, bloom, and ACES tone mapping remain in the composite. Embedded MSL compilation is not covered by the normal C++ CI; iPhone runtime shader compilation, visual quality, and performance require device verification.
