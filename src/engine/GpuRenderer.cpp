@@ -286,7 +286,9 @@ struct BloomVertexOutput {
 fragment float4 bloom_fragment(
     BloomVertexOutput input [[stage_in]],
     texture2d<float> sceneTexture [[texture(0)]],
-    sampler sceneSampler [[sampler(0)]])
+    sampler sceneSampler [[sampler(0)]],
+    texture2d<float> depthTexture [[texture(1)]],
+    sampler depthSampler [[sampler(1)]])
 {
     const float2 texel = 1.0 / float2(sceneTexture.get_width(), sceneTexture.get_height());
     // A restrained 9-tap cross keeps the halo close to the emissive cube.
@@ -300,11 +302,30 @@ fragment float4 bloom_fragment(
     const float weights[9] = {
         0.16, 0.12, 0.12, 0.12, 0.12, 0.05, 0.05, 0.05, 0.05
     };
-    const float3 base = sceneTexture.sample(sceneSampler, input.uv).rgb;
+    // Depth-based screen-space ambient occlusion. The depth prepass stores
+    // camera-space projected depth; only nearer neighboring samples contribute.
+    const float centerDepth = depthTexture.sample(depthSampler, input.uv).r;
+    const float2 aoOffsets[8] = {
+        float2(1.5, 0.0), float2(-1.5, 0.0),
+        float2(0.0, 1.5), float2(0.0, -1.5),
+        float2(2.5, 2.5), float2(-2.5, 2.5),
+        float2(2.5, -2.5), float2(-2.5, -2.5)
+    };
+    float occlusion = 0.0;
+    if (centerDepth < 0.999) {
+        for (uint index = 0; index < 8; ++index) {
+            const float neighborDepth = depthTexture.sample(
+                depthSampler, input.uv + aoOffsets[index] * texel).r;
+            const float depthDelta = centerDepth - neighborDepth;
+            occlusion += smoothstep(0.0015, 0.012, depthDelta);
+        }
+    }
+    const float ambientVisibility = clamp(1.0 - (occlusion / 8.0) * 0.58, 0.58, 1.0);
+    const float3 base = sceneTexture.sample(sceneSampler, input.uv).rgb * ambientVisibility;
     float3 glow = float3(0.0);
     for (uint index = 0; index < 9; ++index) {
         const float3 sampleColor = sceneTexture.sample(
-            sceneSampler, input.uv + offsets[index] * texel).rgb;
+            sceneSampler, input.uv + offsets[index] * texel).rgb * ambientVisibility;
         const float brightness = max(sampleColor.r, max(sampleColor.g, sampleColor.b));
         const float threshold = smoothstep(0.82, 1.20, brightness);
         glow += sampleColor * threshold * weights[index];
@@ -1119,7 +1140,7 @@ bool GpuRenderer::initialize(SDL_Window* window, const std::vector<const Mesh*>&
     bloomFragmentInfo.entrypoint = "bloom_fragment";
     bloomFragmentInfo.format = SDL_GPU_SHADERFORMAT_MSL;
     bloomFragmentInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
-    bloomFragmentInfo.num_samplers = 1;
+    bloomFragmentInfo.num_samplers = 2;
     SDL_GPUShader* bloomFragmentShader = SDL_CreateGPUShader(device_, &bloomFragmentInfo);
     if (bloomFragmentShader == nullptr) {
         setError("SDL_CreateGPUShader(bloom fragment)");
@@ -1243,6 +1264,14 @@ bool GpuRenderer::createDepthTexture(Uint32 width, Uint32 height) {
         SDL_ReleaseGPUTexture(device_, depthTexture_);
         depthTexture_ = nullptr;
     }
+    if (ssaoDepthTexture_ != nullptr) {
+        SDL_ReleaseGPUTexture(device_, ssaoDepthTexture_);
+        ssaoDepthTexture_ = nullptr;
+    }
+    if (ssaoDepthAttachmentTexture_ != nullptr) {
+        SDL_ReleaseGPUTexture(device_, ssaoDepthAttachmentTexture_);
+        ssaoDepthAttachmentTexture_ = nullptr;
+    }
     if (sceneColorTexture_ != nullptr) {
         SDL_ReleaseGPUTexture(device_, sceneColorTexture_);
         sceneColorTexture_ = nullptr;
@@ -1294,6 +1323,36 @@ bool GpuRenderer::createDepthTexture(Uint32 width, Uint32 height) {
         depthWidth_ = 0;
         depthHeight_ = 0;
         setError("SDL_CreateGPUTexture(scene color)");
+        return false;
+    }
+
+    SDL_GPUTextureCreateInfo ssaoColorInfo{};
+    ssaoColorInfo.type = SDL_GPU_TEXTURETYPE_2D;
+    ssaoColorInfo.format = shadowColorFormat_;
+    ssaoColorInfo.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    ssaoColorInfo.width = width;
+    ssaoColorInfo.height = height;
+    ssaoColorInfo.layer_count_or_depth = 1;
+    ssaoColorInfo.num_levels = 1;
+    ssaoColorInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
+    ssaoDepthTexture_ = SDL_CreateGPUTexture(device_, &ssaoColorInfo);
+    if (ssaoDepthTexture_ == nullptr) {
+        setError("SDL_CreateGPUTexture(SSAO depth color)");
+        return false;
+    }
+
+    SDL_GPUTextureCreateInfo ssaoAttachmentInfo{};
+    ssaoAttachmentInfo.type = SDL_GPU_TEXTURETYPE_2D;
+    ssaoAttachmentInfo.format = depthFormat_;
+    ssaoAttachmentInfo.usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET;
+    ssaoAttachmentInfo.width = width;
+    ssaoAttachmentInfo.height = height;
+    ssaoAttachmentInfo.layer_count_or_depth = 1;
+    ssaoAttachmentInfo.num_levels = 1;
+    ssaoAttachmentInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
+    ssaoDepthAttachmentTexture_ = SDL_CreateGPUTexture(device_, &ssaoAttachmentInfo);
+    if (ssaoDepthAttachmentTexture_ == nullptr) {
+        setError("SDL_CreateGPUTexture(SSAO depth attachment)");
         return false;
     }
 
@@ -1366,6 +1425,49 @@ bool GpuRenderer::renderFrame(
     const SDL_GPUBufferBinding vertexBinding{vertexBuffer_, 0};
     const SDL_GPUBufferBinding indexBinding{indexBuffer_, 0};
     const SDL_GPUTextureSamplerBinding colorBinding{colorTexture_, colorSampler_};
+    const Matrix4 view = viewMatrix(camera);
+    const Matrix4 projection = projectionMatrix(
+        static_cast<float>(width) / static_cast<float>(height));
+    const Matrix4 viewProjection = multiply(projection, view);
+
+    // Render a single-sample camera-depth prepass for the SSAO composite.
+    SDL_GPUColorTargetInfo ssaoColorTarget{};
+    ssaoColorTarget.texture = ssaoDepthTexture_;
+    ssaoColorTarget.clear_color = SDL_FColor{1.0F, 1.0F, 1.0F, 1.0F};
+    ssaoColorTarget.load_op = SDL_GPU_LOADOP_CLEAR;
+    ssaoColorTarget.store_op = SDL_GPU_STOREOP_STORE;
+    SDL_GPUDepthStencilTargetInfo ssaoDepthTarget{};
+    ssaoDepthTarget.texture = ssaoDepthAttachmentTexture_;
+    ssaoDepthTarget.clear_depth = 1.0F;
+    ssaoDepthTarget.load_op = SDL_GPU_LOADOP_CLEAR;
+    ssaoDepthTarget.store_op = SDL_GPU_STOREOP_DONT_CARE;
+    ssaoDepthTarget.stencil_load_op = SDL_GPU_LOADOP_DONT_CARE;
+    ssaoDepthTarget.stencil_store_op = SDL_GPU_STOREOP_DONT_CARE;
+    SDL_GPURenderPass* ssaoPass = SDL_BeginGPURenderPass(
+        commandBuffer, &ssaoColorTarget, 1, &ssaoDepthTarget);
+    if (ssaoPass == nullptr) {
+        setError("SDL_BeginGPURenderPass(SSAO depth)");
+        (void)SDL_SubmitGPUCommandBuffer(commandBuffer);
+        return false;
+    }
+    SDL_BindGPUGraphicsPipeline(ssaoPass, shadowPipeline_);
+    SDL_BindGPUVertexBuffers(ssaoPass, 0, &vertexBinding, 1);
+    SDL_BindGPUIndexBuffer(ssaoPass, &indexBinding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
+    for (const SceneRenderItem& item : renderItems) {
+        const SceneObject* object = item.object;
+        if (!item.renderOnGpu || object == nullptr || !object->visible ||
+            item.gpuMeshIndex >= meshRanges_.size()) continue;
+        const Matrix4 model = modelMatrix(object->transform);
+        struct DepthConstants { Matrix4 mvp; Matrix4 model; } constants{};
+        constants.model = model;
+        constants.mvp = multiply(viewProjection, model);
+        SDL_PushGPUVertexUniformData(commandBuffer, 0, &constants,
+            static_cast<Uint32>(sizeof(constants)));
+        const MeshRange& range = meshRanges_[item.gpuMeshIndex];
+        SDL_DrawGPUIndexedPrimitives(ssaoPass, range.indexCount, 1, range.firstIndex, 0, 0);
+    }
+    SDL_EndGPURenderPass(ssaoPass);
+
     const Matrix4 lightVP = shadowViewProjection();
     if (shadowMappingEnabled_) {
         SDL_GPUColorTargetInfo shadowColorTarget{};
@@ -1437,10 +1539,6 @@ bool GpuRenderer::renderFrame(
         SDL_BindGPUFragmentSamplers(pass, 1, &shadowBinding, 1);
     }
 
-    const Matrix4 view = viewMatrix(camera);
-    const Matrix4 projection = projectionMatrix(
-        static_cast<float>(width) / static_cast<float>(height));
-    const Matrix4 viewProjection = multiply(projection, view);
     Vec3 pointLightPosition{0.0F, 0.0F, 4.2F};
     for (const SceneRenderItem& instance : renderItems) {
         if (instance.renderOnGpu && instance.object != nullptr && instance.gpuMeshIndex == 1U) {
@@ -1499,7 +1597,9 @@ bool GpuRenderer::renderFrame(
     }
     SDL_BindGPUGraphicsPipeline(compositePass, bloomPipeline_);
     const SDL_GPUTextureSamplerBinding sceneBinding{sceneColorTexture_, bloomSampler_};
+    const SDL_GPUTextureSamplerBinding ssaoBinding{ssaoDepthTexture_, shadowSampler_};
     SDL_BindGPUFragmentSamplers(compositePass, 0, &sceneBinding, 1);
+    SDL_BindGPUFragmentSamplers(compositePass, 1, &ssaoBinding, 1);
     SDL_DrawGPUPrimitives(compositePass, 3, 1, 0, 0);
     if (showTouchControls && overlayPipeline_ != nullptr) {
         drawOverlay(commandBuffer, compositePass, width, height, movementActive, movementX, movementY,
@@ -1647,6 +1747,8 @@ void GpuRenderer::drawOverlay(
 void GpuRenderer::shutdown() noexcept {
     if (device_ != nullptr) {
         if(shadowSampler_){SDL_ReleaseGPUSampler(device_,shadowSampler_);shadowSampler_=nullptr;}
+        if(ssaoDepthTexture_){SDL_ReleaseGPUTexture(device_,ssaoDepthTexture_);ssaoDepthTexture_=nullptr;}
+        if(ssaoDepthAttachmentTexture_){SDL_ReleaseGPUTexture(device_,ssaoDepthAttachmentTexture_);ssaoDepthAttachmentTexture_=nullptr;}
         if(shadowColorTexture_){SDL_ReleaseGPUTexture(device_,shadowColorTexture_);shadowColorTexture_=nullptr;}
         if(shadowDepthTexture_){SDL_ReleaseGPUTexture(device_,shadowDepthTexture_);shadowDepthTexture_=nullptr;}
         if(shadowPipeline_){SDL_ReleaseGPUGraphicsPipeline(device_,shadowPipeline_);shadowPipeline_=nullptr;}
