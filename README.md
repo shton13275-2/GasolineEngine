@@ -297,3 +297,10 @@ The floor uses a darker blue-teal material, while the rotating cube keeps the br
 - The GPU renderer now prefers an `R16G16B16A16_FLOAT` intermediate scene color target when the device reports support for both color-target and sampler usage. If unavailable, it retains the swapchain-format intermediate target.
 - The scene pipeline and optional 4x MSAA color target use the selected scene format; the final composite remains in the swapchain format. The composite applies an ACES-fitted tone map after the existing bloom contribution.
 - This is a capability-gated HDR render-target path. It does not add exposure adaptation or a separate multi-pass bloom pyramid. Metal format support, HDR highlight appearance, and memory/performance on iPhone hardware still require device verification.
+
+### GPU shadow mapping — 2026-11-03
+
+- Added a 1024×1024 directional shadow map for the SDL_GPU renderer. A light-space depth pass renders visible GPU scene items into an `R32_FLOAT` color target with a depth attachment, then the main PBR fragment shader samples it using a 3×3 percentage-closer filtering (PCF) kernel.
+- Shadow visibility modulates the directional-light contribution; ambient and point-light terms remain unshadowed. The previous floor-only analytic shadow approximation was removed.
+- The shadow map uses a fixed orthographic light camera aligned with the directional light. Devices without sampleable `R32_FLOAT` color-target support fail GPU initialization with an explicit error, allowing the existing application CPU fallback to take over.
+- This is a single directional shadow map, not cascaded or point-light shadowing. Shadow acne, peter-panning, light-frustum coverage, Metal runtime shader compilation, visual quality, and iPhone performance still require CI and physical-device verification.
