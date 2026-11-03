@@ -246,7 +246,7 @@ The `gpu_frame_recovery` unit test exercises the shared control flow used by the
 
 ## GPU rotating cube
 
-When the GPU backend is active, it renders a dedicated six-face cube mesh with per-face UVs and normals. The cube rotates around all three axes; pressing Space pauses or resumes its animation. The GPU cube uses the bundled P3 PPM checker texture and does not replace the CPU renderer's existing demo scene. The procedural cube mesh is covered by the `primitive_meshes` CTest.
+When the GPU backend is active, it renders a dedicated six-face cube mesh with per-face UVs and normals. The cube rotates around all three axes; pressing Space pauses or resumes its animation. The GPU cube uses a solid emissive cyan material on all six faces and has no UV texture coordinates; the bundled P3 PPM texture remains available to the pyramid meshes and does not replace the CPU renderer's existing demo scene. The procedural cube mesh is covered by the `primitive_meshes` CTest.
 
 
 ### GPU multisample anti-aliasing
