@@ -325,3 +325,10 @@ The directional shadow map prefers `R32_FLOAT` when the GPU supports it as a sam
 - The first implementation intentionally focuses on near-horizontal surfaces (the demo floor), uses a conservative fixed reflection strength, and fades hits near screen edges and at longer ray distances. It reuses the existing scene-color and depth textures; no additional render target or geometry pass is added.
 - Because the current prepass stores depth only, this version does not read per-pixel PBR roughness/metallic values and does not produce reflections for off-screen or occluded objects. Screen-space edge/disocclusion artifacts are inherent limitations.
 - Existing SSAO, bloom, and ACES tone mapping remain in the composite. Embedded MSL compilation is not covered by the normal C++ CI; iPhone runtime shader compilation, visual quality, and performance require device verification.
+
+
+### SSR depth-hit stability correction — 2026-11-03
+
+- Tightened the SSR surface mask to favor near-horizontal surfaces, increased the ray-origin normal offset, skipped the near-field region, and reduced reflection strength.
+- Replaced the previous loose single-sample depth-thickness acceptance with a front-to-back depth-delta crossing test and four binary-refinement steps. The ray now requires a valid previous sample before accepting a hit, reducing false intersections around object silhouettes that appeared as stacked reflection layers.
+- This is a source-level correction. The resulting reflection placement and the visible floor gap beneath the cube still require physical iPhone verification.
