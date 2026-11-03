@@ -693,3 +693,11 @@ The earlier implementation drew an expanded cube shell at 1.16x scale with front
 - Added an analytic soft elliptical shadow to the GPU floor fragment shader. Its center is projected from the rotating cube's world position opposite the directional light; the edge is softened with smoothstep and opacity is partial.
 - This is a floor-only approximation, not a depth shadow map: it does not create shadows on arbitrary objects or account for occluders. The bloom remains a single-pass screen-space approximation, not HDR multi-pass Gaussian blur or ray tracing.
 - The embedded MSL is not compiled by the normal C++ CI build. Verify the resulting Windows/iOS workflow and then inspect the IPA on a physical iPhone for Metal shader compilation, shadow placement, bloom appearance, and performance before claiming runtime success.
+
+
+## GPU bloom and pyramid lighting correction — 2026-11-03
+
+- Root cause found in the fragment shader: emission was selected as floor-vs-non-floor, so every non-floor mesh (including both pyramid instances) received `albedo * 1.35` emission. Added `materialFlags.y` / `isEmissive` and set it only for mesh range 1, which is also the mesh selected as the moving cube point-light source.
+- Non-emissive non-floor meshes now have zero material emission and use ambient + directional + attenuated point-light shading. The cube retains strong cyan emission.
+- Reduced bloom to a 9-tap cross, moved threshold to `smoothstep(0.82, 1.20, brightness)`, and lowered composite gain to 0.55. This is intended to keep the halo closer to the cube and reduce washout.
+- This corrects the identified material-emission logic; it does not implement a general shadow map or physically based global illumination. Validate the actual MSL runtime compilation and visual result on a physical iPhone after CI.
