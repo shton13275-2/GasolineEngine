@@ -322,18 +322,74 @@ fragment float4 bloom_fragment(
     // requiring a second normal-buffer render target.
     if (centerDepth < 0.999) {
         const float3 worldPosition = reconstructWorldPosition(uv, centerDepth, constants);
-        const float depthRight = depthTexture.sample(depthSampler, uv + float2(texel.x, 0.0)).r;
-        const float depthUp = depthTexture.sample(depthSampler, uv - float2(0.0, texel.y)).r;
-        const float3 worldRight = reconstructWorldPosition(uv + float2(texel.x, 0.0), depthRight, constants);
-        const float3 worldUp = reconstructWorldPosition(uv - float2(0.0, texel.y), depthUp, constants);
-        float3 normal = normalize(cross(worldRight - worldPosition, worldUp - worldPosition));
+
+        // Estimate each tangent from the nearer valid neighbor. A one-sided
+        // derivative that crosses a foreground silhouette can be many times
+        // longer than the actual surface pixel footprint; using it directly
+        // creates unstable normals and repeated SSR bands.
+        const float2 uvLeft = uv - float2(texel.x, 0.0);
+        const float2 uvRight = uv + float2(texel.x, 0.0);
+        const float2 uvUp = uv - float2(0.0, texel.y);
+        const float2 uvDown = uv + float2(0.0, texel.y);
+        const float depthLeft = depthTexture.sample(depthSampler, uvLeft).r;
+        const float depthRight = depthTexture.sample(depthSampler, uvRight).r;
+        const float depthUp = depthTexture.sample(depthSampler, uvUp).r;
+        const float depthDown = depthTexture.sample(depthSampler, uvDown).r;
+
+        float3 tangentX = float3(0.0);
+        float3 tangentY = float3(0.0);
+        float tangentXLength = 1.0e6;
+        float tangentYLength = 1.0e6;
+        if (depthLeft < 0.999) {
+            const float3 candidate = worldPosition -
+                reconstructWorldPosition(uvLeft, depthLeft, constants);
+            const float candidateLength = length(candidate);
+            if (candidateLength < tangentXLength) {
+                tangentX = candidate;
+                tangentXLength = candidateLength;
+            }
+        }
+        if (depthRight < 0.999) {
+            const float3 candidate = reconstructWorldPosition(uvRight, depthRight, constants) -
+                worldPosition;
+            const float candidateLength = length(candidate);
+            if (candidateLength < tangentXLength) {
+                tangentX = candidate;
+                tangentXLength = candidateLength;
+            }
+        }
+        if (depthUp < 0.999) {
+            const float3 candidate = worldPosition -
+                reconstructWorldPosition(uvUp, depthUp, constants);
+            const float candidateLength = length(candidate);
+            if (candidateLength < tangentYLength) {
+                tangentY = candidate;
+                tangentYLength = candidateLength;
+            }
+        }
+        if (depthDown < 0.999) {
+            const float3 candidate = reconstructWorldPosition(uvDown, depthDown, constants) -
+                worldPosition;
+            const float candidateLength = length(candidate);
+            if (candidateLength < tangentYLength) {
+                tangentY = candidate;
+                tangentYLength = candidateLength;
+            }
+        }
+
+        const bool validSurfaceNeighborhood =
+            tangentXLength < 0.35 && tangentYLength < 0.35;
+        float3 normal = validSurfaceNeighborhood
+            ? normalize(cross(tangentX, tangentY))
+            : float3(0.0, 1.0, 0.0);
         const float3 viewDirection = normalize(constants.cameraPosition.xyz - worldPosition);
         if (dot(normal, viewDirection) < 0.0) normal = -normal;
 
-        // The current prepass stores depth only, so this first SSR stage
-        // focuses on near-horizontal surfaces (the demo floor) and uses a
-        // conservative fixed roughness response.
-        const float surfaceMask = smoothstep(0.82, 0.97, abs(normal.y));
+        // Only trust depth-derived normals when both tangents stay local to
+        // the same visible surface. This suppresses silhouette-derived planes.
+        const float surfaceMask = validSurfaceNeighborhood
+            ? smoothstep(0.82, 0.97, abs(normal.y))
+            : 0.0;
         const float3 incident = -viewDirection;
         const float3 reflectedDirection = normalize(reflect(incident, normal));
         // Offset away from the source surface and skip the near-field region
@@ -341,7 +397,6 @@ fragment float4 bloom_fragment(
         const float3 rayOrigin = worldPosition + normal * 0.075;
         const float edgeFade = min(min(uv.x, 1.0 - uv.x), min(uv.y, 1.0 - uv.y));
         const float screenFade = smoothstep(0.025, 0.14, edgeFade);
-        float previousRayDepth = centerDepth;
         float previousRayDistance = 0.0;
         float previousDepthDelta = -1.0;
         float hitDistance = 0.0;
