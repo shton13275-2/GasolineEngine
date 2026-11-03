@@ -126,6 +126,10 @@ if(BUILD_TESTING)
     target_link_libraries(originalengine_scene_tests PRIVATE originalengine)
     add_test(NAME scene_management COMMAND originalengine_scene_tests)
 
+    add_executable(originalengine_scene_render_item_tests tests/scene_render_item_tests.cpp)
+    target_link_libraries(originalengine_scene_render_item_tests PRIVATE originalengine)
+    add_test(NAME scene_render_items COMMAND originalengine_scene_render_item_tests)
+
     add_executable(originalengine_obj_mesh_tests tests/obj_mesh_loader_tests.cpp)
     target_link_libraries(originalengine_obj_mesh_tests PRIVATE originalengine)
     add_test(NAME obj_mesh_loader COMMAND originalengine_obj_mesh_tests)
