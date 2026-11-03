@@ -59,6 +59,7 @@ struct VertexOutput {
     float4 pointLightPositionRange;
     float4 pointLightColorIntensity;
     float isFloor;
+    float isEmissive;
 };
 
 struct CameraConstants {
@@ -87,6 +88,7 @@ vertex VertexOutput main_vertex(
     output.pointLightPositionRange = camera.pointLightPositionRange;
     output.pointLightColorIntensity = camera.pointLightColorIntensity;
     output.isFloor = camera.materialFlags.x;
+    output.isEmissive = camera.materialFlags.y;
     return output;
 }
 )metal";
@@ -106,6 +108,7 @@ struct VertexOutput {
     float4 pointLightPositionRange;
     float4 pointLightColorIntensity;
     float isFloor;
+    float isEmissive;
 };
 
 struct CameraConstants {
@@ -154,9 +157,12 @@ fragment float4 main_fragment(
         input.pointLightColorIntensity.w * attenuation *
         (albedo * pointDiffuse * 1.8 + pointSpecular);
 
-    const float3 emission = floorSurface ? albedo * 0.035 : albedo * 1.35;
-    const float ambientStrength = floorSurface ? 0.16 : 0.24;
-    const float directionalStrength = floorSurface ? 0.16 : 0.30;
+    const bool emissiveSurface = input.isEmissive > 0.5;
+    const float3 emission = emissiveSurface
+        ? albedo * 1.35
+        : (floorSurface ? albedo * 0.035 : float3(0.0));
+    const float ambientStrength = floorSurface ? 0.16 : (emissiveSurface ? 0.08 : 0.20);
+    const float directionalStrength = floorSurface ? 0.16 : (emissiveSurface ? 0.10 : 0.34);
     const float3 lighting = albedo * (ambientStrength + directionalDiffuse * directionalStrength) +
         emission + float3(directionalSpecular) + pointLight;
 
@@ -223,33 +229,27 @@ fragment float4 bloom_fragment(
     sampler sceneSampler [[sampler(0)]])
 {
     const float2 texel = 1.0 / float2(sceneTexture.get_width(), sceneTexture.get_height());
-    // A wider 13-tap radial kernel spreads bright cyan highlights farther
-    // without adding another render target or blur pass.
-    const float2 offsets[13] = {
+    // A restrained 9-tap cross keeps the halo close to the emissive cube.
+    const float2 offsets[9] = {
         float2(0.0, 0.0),
-        float2(2.0, 0.0), float2(-2.0, 0.0),
-        float2(0.0, 2.0), float2(0.0, -2.0),
-        float2(3.5, 3.5), float2(-3.5, 3.5),
-        float2(3.5, -3.5), float2(-3.5, -3.5),
-        float2(7.0, 0.0), float2(-7.0, 0.0),
-        float2(0.0, 7.0), float2(0.0, -7.0)
+        float2(1.5, 0.0), float2(-1.5, 0.0),
+        float2(0.0, 1.5), float2(0.0, -1.5),
+        float2(3.0, 0.0), float2(-3.0, 0.0),
+        float2(0.0, 3.0), float2(0.0, -3.0)
     };
-    const float weights[13] = {
-        0.18,
-        0.10, 0.10, 0.10, 0.10,
-        0.07, 0.07, 0.07, 0.07,
-        0.035, 0.035, 0.035, 0.035
+    const float weights[9] = {
+        0.16, 0.12, 0.12, 0.12, 0.12, 0.05, 0.05, 0.05, 0.05
     };
     const float3 base = sceneTexture.sample(sceneSampler, input.uv).rgb;
     float3 glow = float3(0.0);
-    for (uint index = 0; index < 13; ++index) {
+    for (uint index = 0; index < 9; ++index) {
         const float3 sampleColor = sceneTexture.sample(
             sceneSampler, input.uv + offsets[index] * texel).rgb;
         const float brightness = max(sampleColor.r, max(sampleColor.g, sampleColor.b));
-        const float threshold = smoothstep(0.55, 1.0, brightness);
+        const float threshold = smoothstep(0.82, 1.20, brightness);
         glow += sampleColor * threshold * weights[index];
     }
-    return float4(base + glow * 1.55, 1.0);
+    return float4(base + glow * 0.55, 1.0);
 }
 )metal";
 
@@ -1247,6 +1247,7 @@ bool GpuRenderer::renderFrame(
         constants.cameraPosition[2] = camera.z();
         constants.cameraPosition[3] = 1.0F;
         constants.materialFlags[0] = instance.meshIndex == 2U ? 1.0F : 0.0F;
+        constants.materialFlags[1] = instance.meshIndex == 1U ? 1.0F : 0.0F;
         constants.pointLightPositionRange[0] = pointLightPosition.x;
         constants.pointLightPositionRange[1] = pointLightPosition.y;
         constants.pointLightPositionRange[2] = pointLightPosition.z;
