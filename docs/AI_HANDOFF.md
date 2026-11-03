@@ -804,3 +804,11 @@ GPU shadow target format fallback — 2026-11-03
 - Keep the issue open. Next investigation should validate the camera-depth prepass encoding/format and sampling, screen-UV to clip/NDC conventions, inverse view-projection reconstruction, and the ray-depth intersection comparison against the exact projection/depth convention. Add temporary debug views for raw depth, reconstructed world position, ray UV, and hit mask before further tuning.
 - The later source change that increases the SSR march density (32 to 64 steps, spacing 0.075 to 0.035) is a separate source-level change; this screenshot does not verify that later change unless the tested IPA is confirmed to contain it.
 - CI/IPA packaging does not compile embedded MSL at runtime or validate the rendered image. Record physical-device validation separately from CI success.
+
+
+### SSR depth precision fallback correction — 2026-11-04
+
+- The camera-depth prepass and directional shadow map share a sampleable depth-color format. The preferred format is `R32_FLOAT`; the portable fallback is `R8G8B8A8_UNORM`.
+- The previous fallback wrote projected depth only to the red channel, reducing the sampled depth to 8-bit precision. That precision is too coarse for the SSR crossing thresholds (`0.0008` minimum crossing and `0.006` maximum accepted delta) and could create unstable hit classification when the fallback is selected.
+- The fallback now packs normalized depth into RGB as a 24-bit value and decodes it for SSR center/ray/refinement samples, SSAO neighbor samples, and directional shadow comparisons. The `R32_FLOAT` path continues to store/read the red channel directly.
+- This is a source-level precision correction. It does not yet prove that the iPhone selected the fallback format or that the reflection artifact is resolved. Embedded MSL compilation is not covered by the normal C++ CI; verify the new iOS IPA on a physical iPhone and record the visual result separately.
