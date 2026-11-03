@@ -304,3 +304,8 @@ The floor uses a darker blue-teal material, while the rotating cube keeps the br
 - Shadow visibility modulates the directional-light contribution; ambient and point-light terms remain unshadowed. The previous floor-only analytic shadow approximation was removed.
 - The shadow map uses a fixed orthographic light camera aligned with the directional light. Devices without sampleable `R32_FLOAT` color-target support fail GPU initialization with an explicit error, allowing the existing application CPU fallback to take over.
 - This is a single directional shadow map, not cascaded or point-light shadowing. Shadow acne, peter-panning, light-frustum coverage, Metal runtime shader compilation, visual quality, and iPhone performance still require CI and physical-device verification.
+
+
+### GPU shadow target compatibility
+
+The directional shadow map prefers `R32_FLOAT` when the GPU supports it as a sampleable color target. Devices without that format use `R8G8B8A8_UNORM` and store depth in the red channel, avoiding an unnecessary GPU-backend failure caused only by the single-channel format. If neither format is supported, the existing CPU fallback remains available. Runtime Metal format support and physical-device shadow appearance still require iPhone verification.
