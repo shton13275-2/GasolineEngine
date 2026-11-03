@@ -195,6 +195,7 @@ GitHubには少なくとも次のブランチが存在する。
 - 実際のworkflow runとjob結果は作業のたびにGitHub Actionsで確認する。古い成功runを最新変更の成功として扱わない。
 - Discord通知は `ios/initial-support` のワークフローだけで送信する。`main` ではDiscord通知jobを実行しない。
 - iOS側のDiscord通知jobはWindowsとiOSの両jobに依存し、iOS unsigned IPA jobが成功した場合にのみ実行する。通知本文にはWindows/iOS両方の結果を含める。Windowsが失敗した場合もiOSが成功すれば結果をまとめて通知する。
+- Discord通知の詳細欄はWindows/iOSのjobだけを含め、Discord通知job自身は除外する。詳細文字列は1,000文字以下に制限し、Embedの各フィールド・説明・総文字数を送信前に検証する。DiscordへのHTTPエラー時はレスポンス本文をActionsログへ出す。Discord通知jobが失敗すると、Windows/iOSのビルドが成功していてもworkflow全体の結論はfailureになるため、個別jobの結果を分けて確認する。
 
 ## 6. ディレクトリと主要ファイル
 
@@ -674,3 +675,12 @@ The earlier implementation drew an expanded cube shell at 1.16x scale with front
 - Removed the unnecessary `nearPlane` lambda capture reported by the previous iOS compiler log.
 - Verify the workflow run for the resulting commit before treating the warning as resolved; physical-device startup and Metal rendering remain separate checks.
 
+
+
+## Discord notification embed limit fix — 2026-11-03
+
+- GitHub Actions run [#317](https://github.com/shton13275-2/GasolineEngine/actions/runs/41554604547) completed the Windows and iOS unsigned IPA jobs successfully, but the Discord Notification job failed because Discord returned HTTP 400.
+- Reconstructed the exact job/step report from the run's Jobs API: it contained 1,060 characters, exceeding Discord's 1,024-character maximum for one embed field. The report also included the Discord notification job itself, which was unnecessary.
+- Updated `.github/workflows/build.yml` to exclude the notification job from its own report, use actual newline characters, cap the details field at 1,000 characters, cap the description, and validate embed field/count/total-length limits before sending.
+- Changed curl to `--fail-with-body` so a future Discord HTTP error includes the response body in the Actions log.
+- The fix requires a new workflow run. Do not consider Discord delivery fixed until that run's Discord Notification job succeeds. Run #317's Windows and iOS jobs were both successful; its overall workflow failed only at notification delivery.
