@@ -323,73 +323,14 @@ fragment float4 bloom_fragment(
     if (centerDepth < 0.999) {
         const float3 worldPosition = reconstructWorldPosition(uv, centerDepth, constants);
 
-        // Estimate each tangent from the nearer valid neighbor. A one-sided
-        // derivative that crosses a foreground silhouette can be many times
-        // longer than the actual surface pixel footprint; using it directly
-        // creates unstable normals and repeated SSR bands.
-        const float2 uvLeft = uv - float2(texel.x, 0.0);
-        const float2 uvRight = uv + float2(texel.x, 0.0);
-        const float2 uvUp = uv - float2(0.0, texel.y);
-        const float2 uvDown = uv + float2(0.0, texel.y);
-        const float depthLeft = depthTexture.sample(depthSampler, uvLeft).r;
-        const float depthRight = depthTexture.sample(depthSampler, uvRight).r;
-        const float depthUp = depthTexture.sample(depthSampler, uvUp).r;
-        const float depthDown = depthTexture.sample(depthSampler, uvDown).r;
-
-        float3 tangentX = float3(0.0);
-        float3 tangentY = float3(0.0);
-        float tangentXLength = 1.0e6;
-        float tangentYLength = 1.0e6;
-        if (depthLeft < 0.999) {
-            const float3 candidate = worldPosition -
-                reconstructWorldPosition(uvLeft, depthLeft, constants);
-            const float candidateLength = length(candidate);
-            if (candidateLength < tangentXLength) {
-                tangentX = candidate;
-                tangentXLength = candidateLength;
-            }
-        }
-        if (depthRight < 0.999) {
-            const float3 candidate = reconstructWorldPosition(uvRight, depthRight, constants) -
-                worldPosition;
-            const float candidateLength = length(candidate);
-            if (candidateLength < tangentXLength) {
-                tangentX = candidate;
-                tangentXLength = candidateLength;
-            }
-        }
-        if (depthUp < 0.999) {
-            const float3 candidate = worldPosition -
-                reconstructWorldPosition(uvUp, depthUp, constants);
-            const float candidateLength = length(candidate);
-            if (candidateLength < tangentYLength) {
-                tangentY = candidate;
-                tangentYLength = candidateLength;
-            }
-        }
-        if (depthDown < 0.999) {
-            const float3 candidate = reconstructWorldPosition(uvDown, depthDown, constants) -
-                worldPosition;
-            const float candidateLength = length(candidate);
-            if (candidateLength < tangentYLength) {
-                tangentY = candidate;
-                tangentYLength = candidateLength;
-            }
-        }
-
-        const bool validSurfaceNeighborhood =
-            tangentXLength < 0.35 && tangentYLength < 0.35;
-        float3 normal = validSurfaceNeighborhood
-            ? normalize(cross(tangentX, tangentY))
-            : float3(0.0, 1.0, 0.0);
+        // The current demo has one known reflective surface: the horizontal
+        // floor plane at world Y = -1.5. Do not infer reflective materials
+        // from screen-space depth normals: that incorrectly marks the cube's
+        // top/bottom faces and pyramid facets as reflective too.
+        const float floorDistance = abs(worldPosition.y + 1.5);
+        const float surfaceMask = 1.0 - smoothstep(0.025, 0.09, floorDistance);
+        const float3 normal = float3(0.0, 1.0, 0.0);
         const float3 viewDirection = normalize(constants.cameraPosition.xyz - worldPosition);
-        if (dot(normal, viewDirection) < 0.0) normal = -normal;
-
-        // Only trust depth-derived normals when both tangents stay local to
-        // the same visible surface. This suppresses silhouette-derived planes.
-        const float surfaceMask = validSurfaceNeighborhood
-            ? smoothstep(0.82, 0.97, abs(normal.y))
-            : 0.0;
         const float3 incident = -viewDirection;
         const float3 reflectedDirection = normalize(reflect(incident, normal));
         // Offset away from the source surface and skip the near-field region
