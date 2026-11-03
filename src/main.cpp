@@ -322,22 +322,18 @@ int main(int argc, char* argv[]) {
             std::cerr << "[OriginalEngine] A demo scene object was not found.\n";
             exitCode = 1;
         }
-        const std::vector<originalengine::MeshInstance> meshInstances{
-            {&demoMesh, demoObject, texturePath.string()},
-            {&demoMesh, leftObject, texturePath.string()},
-            {&floorMesh, floorObject, {}}
+        const std::vector<originalengine::SceneRenderItem> renderItems{
+            {&demoMesh, demoObject, texturePath.string(), 0, true, true},
+            {&demoMesh, leftObject, texturePath.string(), 0, true, true},
+            {&gpuCubeMesh, gpuCubeObject, {}, 1, false, true},
+            {&floorMesh, floorObject, {}, 2, true, true}
         };
         const std::vector<const originalengine::Mesh*> gpuMeshes{
             &demoMesh,
             &gpuCubeMesh,
             &floorMesh
         };
-        const std::vector<originalengine::GpuMeshInstance> gpuSceneObjects{
-            {0, demoObject},
-            {0, leftObject},
-            {1, gpuCubeObject},
-            {2, floorObject}
-        };
+        
         // Conservative static bounds around the demo cube.
         collisionWorld.addObstacle({-1.4F, -1.4F, 2.8F, 1.4F, 1.4F, 5.6F});
         bool running = true;
@@ -561,7 +557,7 @@ int main(int argc, char* argv[]) {
                     [&]() {
                         if (gpuRenderer == nullptr) return false;
                         const bool rendered = gpuRenderer->renderFrame(
-                            camera, gpuSceneObjects, !smokeTest, backendSwitchInput.hasMovementFinger,
+                            camera, renderItems, !smokeTest, backendSwitchInput.hasMovementFinger,
                             backendSwitchInput.movementX, backendSwitchInput.movementY, smoothedFps, wireframe);
                         if (!rendered) gpuFailure = gpuRenderer->lastError();
                         return rendered;
@@ -606,7 +602,7 @@ int main(int argc, char* argv[]) {
             }
 
             if (!renderer3D->render(width, height, elapsedSeconds, camera,
-                                  meshInstances, wireframe)) {
+                                  renderItems, wireframe)) {
                 writeDiagnostic("Rendering a frame failed");
                 exitCode = 1;
                 break;
