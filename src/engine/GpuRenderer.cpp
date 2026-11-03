@@ -345,8 +345,11 @@ fragment float4 bloom_fragment(
         float2 hitUV = float2(0.0);
         bool hitFound = false;
 
-        for (uint step = 1; step <= 32; ++step) {
-            const float distanceAlongRay = 0.22 + 0.075 * float(step - 1);
+        // Use a denser march so each floor pixel does not jump across
+        // thin projected parts of the cube. The previous 0.075 world-unit
+        // spacing produced visibly discontinuous, comb-like reflection bands.
+        for (uint step = 1; step <= 64; ++step) {
+            const float distanceAlongRay = 0.12 + 0.035 * float(step - 1);
             const float3 samplePosition = rayOrigin + reflectedDirection * distanceAlongRay;
             const float4 clip = constants.viewProjection * float4(samplePosition, 1.0);
             if (clip.w <= 0.001) break;
