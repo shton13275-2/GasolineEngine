@@ -362,7 +362,7 @@ fragment float4 bloom_fragment(
                 // Require a genuine front-to-back crossing. A single loose
                 // depth-thickness test caused nearby silhouettes to appear as
                 // stacked reflection layers directly below the source object.
-                if (depthDelta > 0.0008 && previousRayDepth <= sceneDepth + 0.0008 &&
+                if (depthDelta > 0.0008 && previousDepthDelta <= 0.0008 &&
                     depthDelta < 0.006) {
                     // Refine the first crossing to reduce coarse-step false hits.
                     float lowDistance = previousRayDistance;
@@ -390,10 +390,10 @@ fragment float4 bloom_fragment(
                     hitFound = true;
                     break;
                 }
-                previousRayDepth = projected.z;
+                previousDepthDelta = depthDelta;
                 previousRayDistance = distanceAlongRay;
             } else {
-                previousRayDepth = projected.z;
+                previousDepthDelta = -1.0;
                 previousRayDistance = distanceAlongRay;
             }
         }
