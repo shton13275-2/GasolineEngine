@@ -774,3 +774,10 @@ GPU shadow target format fallback — 2026-11-03
 - Tightened the surface mask toward horizontal surfaces, increased the normal origin bias, skipped the near-field region, reduced reflection intensity, and changed hit detection to require a consecutive-sample depth-delta crossing. Four binary-refinement steps refine the first crossing.
 - Background samples are treated as being in front of the scene geometry; a hit cannot be accepted until a prior ray sample exists. This avoids accepting the first visible depth sample as an intersection by default.
 - This is a source-level correction only. Verify the resulting reflection on a physical iPhone; CI does not compile the embedded MSL shader at runtime or judge reflection appearance.
+
+
+### SSR surface-normal stability correction — 2026-11-03
+
+- Replaced the one-sided depth-neighbor normal estimate with four-neighbor tangent selection. For each screen axis, the shader chooses the shorter valid world-space neighbor segment rather than blindly crossing a foreground/background silhouette.
+- SSR is rejected for pixels whose selected tangent lengths exceed 0.35 world units, preventing depth-discontinuity-derived normals from being treated as reflective floor surfaces.
+- This is a source-level stability guard. It does not remove inherent SSR limitations, and the visible result still requires testing on the target iPhone.
