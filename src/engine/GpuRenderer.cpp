@@ -119,6 +119,7 @@ struct VertexOutput {
     float isEmissive;
     float materialMetallic;
     float materialRoughness;
+    float4 lightSpacePosition;
 };
 
 struct CameraConstants {
