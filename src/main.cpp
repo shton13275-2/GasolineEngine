@@ -277,7 +277,7 @@ int main(int argc, char* argv[]) {
             exitCode = 1;
         }
         writeDiagnostic("Stage: OBJ load completed");
-        originalengine::Mesh gpuCubeMesh = originalengine::makeTexturedCubeMesh();
+        originalengine::Mesh gpuCubeMesh = originalengine::makeEmissiveCubeMesh();
         // Shared cyan floor plane; CPU draws its depth-tested grid over the surface.
         originalengine::Mesh floorMesh;
         floorMesh.vertices = {
