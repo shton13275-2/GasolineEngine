@@ -60,6 +60,8 @@ struct VertexOutput {
     float4 pointLightColorIntensity;
     float isFloor;
     float isEmissive;
+    float materialMetallic;
+    float materialRoughness;
 };
 
 struct CameraConstants {
@@ -89,6 +91,8 @@ vertex VertexOutput main_vertex(
     output.pointLightColorIntensity = camera.pointLightColorIntensity;
     output.isFloor = camera.materialFlags.x;
     output.isEmissive = camera.materialFlags.y;
+    output.materialMetallic = camera.materialFlags.z;
+    output.materialRoughness = camera.materialFlags.w;
     return output;
 }
 )metal";
@@ -109,6 +113,8 @@ struct VertexOutput {
     float4 pointLightColorIntensity;
     float isFloor;
     float isEmissive;
+    float materialMetallic;
+    float materialRoughness;
 };
 
 struct CameraConstants {
@@ -135,11 +141,35 @@ fragment float4 main_fragment(
         ? float3(0.025, 0.20, 0.32)
         : float3(0.12, 0.78, 1.0);
     const float3 albedo = sampledColor * cyanTint;
+    const float metallic = clamp(input.materialMetallic, 0.0, 1.0);
+    const float roughness = clamp(input.materialRoughness, 0.045, 1.0);
+    const float alpha = roughness * roughness;
+    const float alphaSquared = alpha * alpha;
+    const float3 viewDirection = normalize(input.viewDirection);
+    const float3 f0 = mix(float3(0.04), albedo, metallic);
+
+    // Cook-Torrance BRDF with GGX normal distribution, Smith-Schlick
+    // geometry, and Schlick Fresnel. Kept in one forward pass for mobile GPUs.
     const float3 directionalLight = normalize(float3(-0.35, 0.8, -0.45));
-    const float directionalDiffuse = max(dot(normal, directionalLight), 0.0);
-    const float3 directionalHalf = normalize(directionalLight + normalize(input.viewDirection));
-    const float directionalSpecular = pow(
-        max(dot(normal, directionalHalf), 0.0), 32.0) * (floorSurface ? 0.04 : 0.16);
+    const float3 directionalHalf = normalize(viewDirection + directionalLight);
+    const float nDotV = max(dot(normal, viewDirection), 0.001);
+    const float nDotL = max(dot(normal, directionalLight), 0.0);
+    const float nDotH = max(dot(normal, directionalHalf), 0.0);
+    const float vDotH = max(dot(viewDirection, directionalHalf), 0.0);
+    const float denominator = nDotH * nDotH * (alphaSquared - 1.0) + 1.0;
+    const float distribution = alphaSquared /
+        max(3.14159265 * denominator * denominator, 0.001);
+    const float k = (roughness + 1.0) * (roughness + 1.0) / 8.0;
+    const float geometryV = nDotV / (nDotV * (1.0 - k) + k);
+    const float geometryL = nDotL / (nDotL * (1.0 - k) + k);
+    const float3 fresnel = f0 + (1.0 - f0) * pow(1.0 - vDotH, 5.0);
+    const float3 specular = distribution * geometryV * geometryL * fresnel /
+        max(4.0 * nDotV * max(nDotL, 0.001), 0.001);
+    const float3 diffuseWeight = (1.0 - fresnel) * (1.0 - metallic);
+    const float3 directionalBrdf =
+        diffuseWeight * albedo / 3.14159265 + specular;
+    const float3 directionalContribution =
+        directionalBrdf * nDotL * float3(1.15, 1.15, 1.15);
 
     const float3 toPointLight = input.pointLightPositionRange.xyz - input.worldPosition;
     const float lightDistance = length(toPointLight);
@@ -149,22 +179,34 @@ fragment float4 main_fragment(
     const float rangeFade = max(1.0 - lightDistance / lightRange, 0.0);
     const float attenuation = rangeFade * rangeFade /
         (1.0 + 0.18 * lightDistance * lightDistance);
-    const float pointDiffuse = max(dot(normal, pointDirection), 0.0);
-    const float3 pointHalf = normalize(pointDirection + normalize(input.viewDirection));
-    const float pointSpecular = pow(
-        max(dot(normal, pointHalf), 0.0), 48.0) * (floorSurface ? 0.18 : 0.28);
-    const float3 pointLight = input.pointLightColorIntensity.rgb *
-        input.pointLightColorIntensity.w * attenuation *
-        (albedo * pointDiffuse * 1.8 + pointSpecular);
+    const float pointNdotL = max(dot(normal, pointDirection), 0.0);
+    const float3 pointHalf = normalize(pointDirection + viewDirection);
+    const float pointNdotH = max(dot(normal, pointHalf), 0.0);
+    const float pointVdotH = max(dot(viewDirection, pointHalf), 0.0);
+    const float pointDenominator =
+        pointNdotH * pointNdotH * (alphaSquared - 1.0) + 1.0;
+    const float pointDistribution = alphaSquared /
+        max(3.14159265 * pointDenominator * pointDenominator, 0.001);
+    const float pointGeometryL =
+        pointNdotL / (pointNdotL * (1.0 - k) + k);
+    const float3 pointFresnel = f0 + (1.0 - f0) * pow(1.0 - pointVdotH, 5.0);
+    const float3 pointSpecular =
+        pointDistribution * geometryV * pointGeometryL * pointFresnel /
+        max(4.0 * nDotV * max(pointNdotL, 0.001), 0.001);
+    const float3 pointDiffuseWeight = (1.0 - pointFresnel) * (1.0 - metallic);
+    const float3 pointBrdf =
+        pointDiffuseWeight * albedo / 3.14159265 + pointSpecular;
+    const float3 pointRadiance = input.pointLightColorIntensity.rgb *
+        input.pointLightColorIntensity.w * attenuation;
+    const float3 pointContribution = pointBrdf * pointNdotL * pointRadiance;
 
     const bool emissiveSurface = input.isEmissive > 0.5;
     const float3 emission = emissiveSurface
         ? albedo * 1.35
         : (floorSurface ? albedo * 0.035 : float3(0.0));
-    const float ambientStrength = floorSurface ? 0.16 : (emissiveSurface ? 0.08 : 0.20);
-    const float directionalStrength = floorSurface ? 0.16 : (emissiveSurface ? 0.10 : 0.34);
-    const float3 lighting = albedo * (ambientStrength + directionalDiffuse * directionalStrength) +
-        emission + float3(directionalSpecular) + pointLight;
+    const float ambientStrength = floorSurface ? 0.16 : (emissiveSurface ? 0.08 : 0.12);
+    const float3 ambient = albedo * ambientStrength * (1.0 - metallic);
+    const float3 lighting = ambient + directionalContribution + pointContribution + emission;
 
     // Approximate the cube's soft directional shadow on the horizontal floor.
     // The shadow is projected opposite the directional light and fades at its edge.
@@ -1248,6 +1290,8 @@ bool GpuRenderer::renderFrame(
         constants.cameraPosition[3] = 1.0F;
         constants.materialFlags[0] = instance.gpuMeshIndex == 2U ? 1.0F : 0.0F;
         constants.materialFlags[1] = instance.gpuMeshIndex == 1U ? 1.0F : 0.0F;
+        constants.materialFlags[2] = std::clamp(instance.metallic, 0.0F, 1.0F);
+        constants.materialFlags[3] = std::clamp(instance.roughness, 0.045F, 1.0F);
         constants.pointLightPositionRange[0] = pointLightPosition.x;
         constants.pointLightPositionRange[1] = pointLightPosition.y;
         constants.pointLightPositionRange[2] = pointLightPosition.z;
