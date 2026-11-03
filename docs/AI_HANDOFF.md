@@ -734,3 +734,11 @@ The earlier implementation drew an expanded cube shell at 1.16x scale with front
 - Shadow visibility modulates the directional-light contribution; ambient and point-light terms remain unshadowed. The previous floor-only analytic shadow approximation was removed.
 - The shadow map uses a fixed orthographic light camera aligned with the directional light. Devices without sampleable `R32_FLOAT` color-target support fail GPU initialization with an explicit error, allowing the existing application CPU fallback to take over.
 - This is a single directional shadow map, not cascaded or point-light shadowing. Shadow acne, peter-panning, light-frustum coverage, Metal runtime shader compilation, visual quality, and iPhone performance still require CI and physical-device verification.
+
+
+GPU shadow target format fallback — 2026-11-03
+
+- GPU shadow-map creation now prefers `R32_FLOAT` when the device supports it as both a color target and sampler.
+- If that format is unavailable, it selects `R8G8B8A8_UNORM` with the same color-target and sampler requirements and stores the shadow depth in the red channel.
+- GPU activation no longer fails solely because `R32_FLOAT` is unsupported. If neither format is supported, initialization still reports a clear error and the existing CPU fallback is used.
+- This change is source-level until the matching Windows/iOS CI completes. The CI build does not validate runtime Metal format support or visual shadow output on an iPhone.
