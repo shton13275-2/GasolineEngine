@@ -69,6 +69,7 @@ private:
     SDL_GPUTexture* colorTexture_{nullptr};
     SDL_GPUSampler* colorSampler_{nullptr};
     SDL_GPUTextureFormat depthFormat_{SDL_GPU_TEXTUREFORMAT_INVALID};
+    SDL_GPUTextureFormat sceneColorFormat_{SDL_GPU_TEXTUREFORMAT_INVALID};
     Uint32 depthWidth_{0};
     Uint32 depthHeight_{0};
     SDL_GPUSampleCount sampleCount_{SDL_GPU_SAMPLECOUNT_1};
