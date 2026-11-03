@@ -362,3 +362,10 @@ The directional shadow map prefers `R32_FLOAT` when the GPU supports it as a sam
 - Keep the issue open. Next investigation should validate the camera-depth prepass encoding/format and sampling, screen-UV to clip/NDC conventions, inverse view-projection reconstruction, and the ray-depth intersection comparison against the exact projection/depth convention. Add temporary debug views for raw depth, reconstructed world position, ray UV, and hit mask before further tuning.
 - The later source change that increases the SSR march density (32 to 64 steps, spacing 0.075 to 0.035) is a separate source-level change; this screenshot does not verify that later change unless the tested IPA is confirmed to contain it.
 - CI/IPA packaging does not compile embedded MSL at runtime or validate the rendered image. Record physical-device validation separately from CI success.
+
+
+## GPU screen-space reflections (experimental)
+
+The GPU fullscreen composite includes a floor-only screen-space reflection pass. It reconstructs world position from the camera-depth prepass, traces a reflected view ray against the sampled scene depth, and samples the scene color at the first accepted hit. SSR remains limited to visible on-screen geometry and can fail at screen edges or depth discontinuities; it is not ray tracing or a complete material-aware reflection system.
+
+The camera-depth prepass and directional shadow map prefer `R32_FLOAT`. On devices that require the `R8G8B8A8_UNORM` fallback, normalized depth is packed into RGB at 24-bit precision and decoded by SSR, SSAO, and shadow sampling. The precision correction is source-level until a new IPA is tested on a physical iPhone. Embedded MSL runtime compilation and the visible reflection result are not verified by ordinary C++ CI.
