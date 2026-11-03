@@ -17,6 +17,11 @@ struct SceneRenderItem {
     std::size_t gpuMeshIndex{0};
     bool renderOnCpu{true};
     bool renderOnGpu{true};
+
+    // Metallic-roughness material inputs used by the GPU PBR shader.
+    // Values are clamped to [0, 1] before being sent to the GPU.
+    float metallic{0.0F};
+    float roughness{0.55F};
 };
 
 } // namespace originalengine
