@@ -102,16 +102,19 @@ jobs:
       - name: Verify iOS bundle identifier setting
         shell: bash
         run: |
-          bundle_id="$(
+          settings="$(
             xcodebuild \
               -project build-ios/GasolineEngine.xcodeproj \
               -target originalengine_app \
               -configuration Release \
               -sdk iphoneos \
-              -showBuildSettings |
-              awk -F ' = ' '/PRODUCT_BUNDLE_IDENTIFIER = / { print $2; exit }'
+              -showBuildSettings
           )"
-          test "$bundle_id" = "com.gasolineengine.demo"
+          printf '%s\\n' "$settings" | grep -E "PRODUCT_BUNDLE_IDENTIFIER|INFOPLIST_KEY_CFBundleIdentifier" || true
+          if ! printf '%s\\n' "$settings" | grep -Fq "PRODUCT_BUNDLE_IDENTIFIER = com.gasolineengine.demo"; then
+            echo "::error::Xcode did not report the expected PRODUCT_BUNDLE_IDENTIFIER for originalengine_app."
+            exit 1
+          fi
 
       - name: Build unsigned iOS app
         run: >-
