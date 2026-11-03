@@ -323,10 +323,10 @@ int main(int argc, char* argv[]) {
             exitCode = 1;
         }
         const std::vector<originalengine::SceneRenderItem> renderItems{
-            {&demoMesh, demoObject, texturePath.string(), 0, true, true},
-            {&demoMesh, leftObject, texturePath.string(), 0, true, true},
-            {&gpuCubeMesh, gpuCubeObject, {}, 1, false, true},
-            {&floorMesh, floorObject, {}, 2, true, true}
+            {&demoMesh, demoObject, texturePath.string(), 0, true, true, 0.05F, 0.72F},
+            {&demoMesh, leftObject, texturePath.string(), 0, true, true, 0.05F, 0.72F},
+            {&gpuCubeMesh, gpuCubeObject, {}, 1, false, true, 0.35F, 0.24F},
+            {&floorMesh, floorObject, {}, 2, true, true, 0.0F, 0.92F}
         };
         const std::vector<const originalengine::Mesh*> gpuMeshes{
             &demoMesh,
