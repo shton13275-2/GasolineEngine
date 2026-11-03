@@ -742,3 +742,9 @@ GPU shadow target format fallback — 2026-11-03
 - If that format is unavailable, it selects `R8G8B8A8_UNORM` with the same color-target and sampler requirements and stores the shadow depth in the red channel.
 - GPU activation no longer fails solely because `R32_FLOAT` is unsupported. If neither format is supported, initialization still reports a clear error and the existing CPU fallback is used.
 - This change is source-level until the matching Windows/iOS CI completes. The CI build does not validate runtime Metal format support or visual shadow output on an iPhone.
+
+
+## GPU shadow shader varying fix — 2026-11-03
+
+- The fragment-stage `VertexOutput` structure was missing `lightSpacePosition`, although the vertex shader writes it and the fragment shader reads it for shadow-map projection. Added the matching `float4 lightSpacePosition` member to the fragment input structure.
+- This is a concrete MSL interface mismatch found by source inspection. The normal C++ CI build does not compile embedded MSL, so only an actual Metal shader compilation/runtime test on iPhone can confirm the GPU backend now initializes successfully.
