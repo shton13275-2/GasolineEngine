@@ -7,6 +7,8 @@
 
 namespace originalengine {
 
+[[nodiscard]] inline Mesh makeTexturedCubeMesh(float halfExtent);
+
 // Creates a six-sided cube with independent face vertices, outward normals,
 // and no texture coordinates, for use with a solid emissive material.
 [[nodiscard]] inline Mesh makeEmissiveCubeMesh(float halfExtent = 1.0F) {
