@@ -136,7 +136,7 @@ GitHubには少なくとも次のブランチが存在する。
 - P3 ASCII PPMをRGBA8へ変換するPpmImageLoaderを追加。GPU側でSDL_GPUTextureへ転送し、fragment sampler slot 0へbindする。
 - OBJのUVはGPUへ渡し、画像の行方向に合わせてVを反転する。UVの有無は専用の頂点属性で管理し、負のUV値や0〜1範囲外の有効な座標を欠落扱いしない。UVがない頂点のみテクスチャなしfallbackにする。
 - OBJにvnがある場合はその法線を使用し、ない場合は三角形ごとのflat normalを生成する。
-- per-object uniformにMVP、model、inverse-transpose normal matrix、camera positionを渡す。fragment shaderはambient、directional diffuse、Blinn-Phong specularに加え、回転キューブの位置を使った減衰付きemissive point lightingを計算する。
+- per-object uniformにMVP、model、inverse-transpose normal matrix、camera positionを渡す。fragment shaderはambient、directional diffuse、Blinn-Phong specularに加え、回転キューブの位置を使った減衰付きemissive point lightingを計算する。回転キューブはUVを持たず、PPM textureをサンプリングせずに全6面へ発光シアンを適用する。
 - GPU overlayはタッチガイド、FPS、CPU切替ボタンを描画する。シーンはサンプル可能な中間カラーtextureへ描画され、9-tap screen-space bloomでswapchainへ合成した後、single-sample overlay pipelineでUIを描画する。CPU側のfallbackは維持する。
 - GPU初期化はMSLを要求するため、Metal対応GPUを主対象とする。swapchain color/depth formatが対応する場合は4x MSAAを使い、非対応時はsingle-sampleへfallbackする。Windows CIのコンパイル成功はWindowsでのGPU runtime対応を意味しない。
 
@@ -587,6 +587,7 @@ CI:
 
 - Added `makeTexturedCubeMesh()` in `include/engine/PrimitiveMeshes.hpp`: 24 face-local vertices, 12 triangles, outward face normals, and complete per-face UVs.
 - The GPU backend now uploads this dedicated cube mesh instead of the OBJ pyramid mesh and draws a dedicated `GpuRotatingCube` scene object at the center of the camera view.
+- The GPU cube is created with `makeEmissiveCubeMesh()`, which clears UV-coordinate presence on all 24 face-local vertices; the fragment shader therefore uses the vertex color and does not sample the PPM texture for the cube. Its material applies the same emissive cyan treatment to all six faces. The pyramid meshes continue to use the shared P3 PPM texture.
 - The GPU cube rotates around X/Y/Z using the existing animation clock. Space pauses/resumes the same clock, so the GPU cube respects the existing animation pause control.
 - The CPU renderer's existing OBJ pyramid instances and software cube path are left unchanged. The GPU mode's scene list contains only the dedicated cube.
 - Added `primitive_meshes` CTest coverage for vertex/triangle counts, UV presence/range, unit normals, and index bounds.
@@ -597,7 +598,7 @@ CI:
 - GPU rendererの単一mesh前提を解消し、OBJピラミッドmeshとプロシージャルcube meshを同じvertex/index bufferへ格納する。
 - meshごとのindex rangeを保持し、各GPU scene instanceがmesh indexを指定して描画する。
 - GPUモードで左右のピラミッド2個と3軸回転cubeを同じフレームに描画する。1/2キーの可視切替とSpaceによるcubeアニメーション停止は既存SceneObjectを共有する。
-- 全meshで同じP3 PPM textureを共有する。material別texture、GPU floor grid、wireframe、CPU HUD全機能のGPU移植はこの変更の対象外。
+- ピラミッドmeshはP3 PPM textureを使用する。回転cubeはUVなしの発光シアンmeshとして描画し、texture samplingを行わない。material別texture、GPU floor grid、wireframe、CPU HUD全機能のGPU移植はこの変更の対象外。
 - CIと実機Metal描画の確認状態はコミット後に追記する。
 
 
