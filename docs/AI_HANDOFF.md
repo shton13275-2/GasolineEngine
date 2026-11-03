@@ -748,3 +748,11 @@ GPU shadow target format fallback — 2026-11-03
 
 - The fragment-stage `VertexOutput` structure was missing `lightSpacePosition`, although the vertex shader writes it and the fragment shader reads it for shadow-map projection. Added the matching `float4 lightSpacePosition` member to the fragment input structure.
 - This is a concrete MSL interface mismatch found by source inspection. The normal C++ CI build does not compile embedded MSL, so only an actual Metal shader compilation/runtime test on iPhone can confirm the GPU backend now initializes successfully.
+
+
+## GPU screen-space ambient occlusion (SSAO) — 2026-11-03
+
+- Added a single-sample camera-depth prepass using the existing shadow/depth graphics pipeline. The prepass writes projected camera depth into a screen-sized sampleable color texture and uses a dedicated single-sample depth attachment; this is independent of the scene's optional 4x MSAA depth buffer.
+- Extended the final fullscreen composite to sample eight neighboring depth positions. Neighbor samples that are closer than the center pixel contribute occlusion, and the resulting ambient-visibility factor darkens the scene before the existing bloom and ACES-fitted tone mapping.
+- This is a lightweight screen-space depth-neighborhood AO approximation, not a full view-space SSAO implementation: it does not reconstruct view-space positions/normals, use a hemisphere sampling kernel, or apply temporal filtering.
+- The added pass costs one extra geometry depth pass per frame and two screen-sized textures. The normal C++ CI build does not compile embedded MSL; Metal runtime shader compilation, sampling, visual quality, and iPhone performance remain to be checked on-device.
