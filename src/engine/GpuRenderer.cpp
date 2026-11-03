@@ -37,6 +37,12 @@ struct ObjectConstants {
     Matrix4 shadowMvp{};
 };
 
+struct CompositeConstants {
+    Matrix4 inverseViewProjection{};
+    Matrix4 viewProjection{};
+    float cameraPosition[4]{};
+};
+
 constexpr char vertexSource[] = R"metal(
 #include <metal_stdlib>
 using namespace metal;
@@ -283,28 +289,82 @@ struct BloomVertexOutput {
     float4 position [[position]];
     float2 uv;
 };
+struct CompositeConstants {
+    float4x4 inverseViewProjection;
+    float4x4 viewProjection;
+    float4 cameraPosition;
+};
+
+float3 reconstructWorldPosition(float2 uv, float depth, constant CompositeConstants& c)
+{
+    const float2 ndcXY = float2(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0);
+    float4 world = c.inverseViewProjection * float4(ndcXY, depth, 1.0);
+    return world.xyz / max(abs(world.w), 0.00001) * (world.w < 0.0 ? -1.0 : 1.0);
+}
+
 fragment float4 bloom_fragment(
     BloomVertexOutput input [[stage_in]],
     texture2d<float> sceneTexture [[texture(0)]],
     sampler sceneSampler [[sampler(0)]],
     texture2d<float> depthTexture [[texture(1)]],
-    sampler depthSampler [[sampler(1)]])
+    sampler depthSampler [[sampler(1)]],
+    constant CompositeConstants& constants [[buffer(0)]])
 {
     const float2 texel = 1.0 / float2(sceneTexture.get_width(), sceneTexture.get_height());
-    // A restrained 9-tap cross keeps the halo close to the emissive cube.
-    const float2 offsets[9] = {
-        float2(0.0, 0.0),
-        float2(1.5, 0.0), float2(-1.5, 0.0),
-        float2(0.0, 1.5), float2(0.0, -1.5),
-        float2(3.0, 0.0), float2(-3.0, 0.0),
-        float2(0.0, 3.0), float2(0.0, -3.0)
-    };
-    const float weights[9] = {
-        0.16, 0.12, 0.12, 0.12, 0.12, 0.05, 0.05, 0.05, 0.05
-    };
-    // Depth-based screen-space ambient occlusion. The depth prepass stores
-    // camera-space projected depth; only nearer neighboring samples contribute.
-    const float centerDepth = depthTexture.sample(depthSampler, input.uv).r;
+    const float2 uv = input.uv;
+    const float centerDepth = depthTexture.sample(depthSampler, uv).r;
+    float3 base = sceneTexture.sample(sceneSampler, uv).rgb;
+    float3 reflectionColor = float3(0.0);
+    float reflectionWeight = 0.0;
+
+    // Reconstruct a world-space position from the camera depth prepass.
+    // Neighbor positions provide a screen-space normal estimate without
+    // requiring a second normal-buffer render target.
+    if (centerDepth < 0.999) {
+        const float3 worldPosition = reconstructWorldPosition(uv, centerDepth, constants);
+        const float depthRight = depthTexture.sample(depthSampler, uv + float2(texel.x, 0.0)).r;
+        const float depthUp = depthTexture.sample(depthSampler, uv - float2(0.0, texel.y)).r;
+        const float3 worldRight = reconstructWorldPosition(uv + float2(texel.x, 0.0), depthRight, constants);
+        const float3 worldUp = reconstructWorldPosition(uv - float2(0.0, texel.y), depthUp, constants);
+        float3 normal = normalize(cross(worldRight - worldPosition, worldUp - worldPosition));
+        const float3 viewDirection = normalize(constants.cameraPosition.xyz - worldPosition);
+        if (dot(normal, viewDirection) < 0.0) normal = -normal;
+
+        // The current prepass stores depth only, so this first SSR stage
+        // focuses on near-horizontal surfaces (the demo floor) and uses a
+        // conservative fixed roughness response.
+        const float surfaceMask = smoothstep(0.62, 0.92, abs(normal.y));
+        const float3 incident = -viewDirection;
+        const float3 reflectedDirection = normalize(reflect(incident, normal));
+        float3 rayPosition = worldPosition + normal * 0.035;
+        const float edgeFade = min(min(uv.x, 1.0 - uv.x), min(uv.y, 1.0 - uv.y));
+        const float screenFade = smoothstep(0.015, 0.12, edgeFade);
+
+        for (uint step = 1; step <= 24; ++step) {
+            const float distanceAlongRay = 0.10 * float(step);
+            const float3 samplePosition = rayPosition + reflectedDirection * distanceAlongRay;
+            const float4 clip = constants.viewProjection * float4(samplePosition, 1.0);
+            if (clip.w <= 0.001) break;
+            const float3 projected = clip.xyz / clip.w;
+            const float2 sampleUV = float2(projected.x * 0.5 + 0.5, 0.5 - projected.y * 0.5);
+            if (any(sampleUV <= float2(0.002)) || any(sampleUV >= float2(0.998)) ||
+                projected.z <= 0.0 || projected.z >= 1.0) break;
+
+            const float sceneDepth = depthTexture.sample(depthSampler, sampleUV).r;
+            if (sceneDepth < 0.999 && projected.z > sceneDepth + 0.0015 &&
+                projected.z - sceneDepth < 0.018) {
+                reflectionColor = sceneTexture.sample(sceneSampler, sampleUV).rgb;
+                const float distanceFade = 1.0 - float(step) / 30.0;
+                reflectionWeight = surfaceMask * screenFade *
+                    clamp(distanceFade, 0.0, 1.0) * 0.28;
+                break;
+            }
+        }
+    }
+
+    base = mix(base, reflectionColor, reflectionWeight);
+
+    // Preserve the existing depth-neighborhood ambient-occlusion approximation.
     const float2 aoOffsets[8] = {
         float2(1.5, 0.0), float2(-1.5, 0.0),
         float2(0.0, 1.5), float2(0.0, -1.5),
@@ -315,24 +375,31 @@ fragment float4 bloom_fragment(
     if (centerDepth < 0.999) {
         for (uint index = 0; index < 8; ++index) {
             const float neighborDepth = depthTexture.sample(
-                depthSampler, input.uv + aoOffsets[index] * texel).r;
-            const float depthDelta = centerDepth - neighborDepth;
-            occlusion += smoothstep(0.0015, 0.012, depthDelta);
+                depthSampler, uv + aoOffsets[index] * texel).r;
+            occlusion += smoothstep(0.0015, 0.012, centerDepth - neighborDepth);
         }
     }
     const float ambientVisibility = clamp(1.0 - (occlusion / 8.0) * 0.58, 0.58, 1.0);
-    const float3 base = sceneTexture.sample(sceneSampler, input.uv).rgb * ambientVisibility;
+    base *= ambientVisibility;
+
+    // Existing 9-tap bloom, evaluated after reflection and SSAO.
+    const float2 offsets[9] = {
+        float2(0.0, 0.0),
+        float2(1.5, 0.0), float2(-1.5, 0.0),
+        float2(0.0, 1.5), float2(0.0, -1.5),
+        float2(3.0, 0.0), float2(-3.0, 0.0),
+        float2(0.0, 3.0), float2(0.0, -3.0)
+    };
+    const float weights[9] = {
+        0.16, 0.12, 0.12, 0.12, 0.12, 0.05, 0.05, 0.05, 0.05
+    };
     float3 glow = float3(0.0);
     for (uint index = 0; index < 9; ++index) {
-        const float3 sampleColor = sceneTexture.sample(
-            sceneSampler, input.uv + offsets[index] * texel).rgb * ambientVisibility;
+        const float3 sampleColor = sceneTexture.sample(sceneSampler, uv + offsets[index] * texel).rgb;
         const float brightness = max(sampleColor.r, max(sampleColor.g, sampleColor.b));
-        const float threshold = smoothstep(0.82, 1.20, brightness);
-        glow += sampleColor * threshold * weights[index];
+        glow += sampleColor * smoothstep(0.82, 1.20, brightness) * weights[index];
     }
     const float3 hdrColor = base + glow * 0.55;
-    // ACES fitted tone mapping converts the floating-point scene target to
-    // the display-referred swapchain without clipping highlights abruptly.
     const float3 numerator = hdrColor * (2.51 * hdrColor + 0.03);
     const float3 denominator = hdrColor * (2.43 * hdrColor + 0.59) + 0.14;
     const float3 mapped = clamp(numerator / max(denominator, 0.0001), 0.0, 1.0);
@@ -430,6 +497,40 @@ Matrix4 multiply(const Matrix4& a, const Matrix4& b) {
                     a[static_cast<std::size_t>(k * 4 + row)] *
                     b[static_cast<std::size_t>(column * 4 + k)];
             }
+        }
+    }
+    return result;
+}
+
+Matrix4 inverseMatrix(const Matrix4& matrix) {
+    float augmented[4][8]{};
+    for (int row = 0; row < 4; ++row) {
+        for (int column = 0; column < 4; ++column) {
+            augmented[row][column] = matrix[static_cast<std::size_t>(column * 4 + row)];
+        }
+        augmented[row][row + 4] = 1.0F;
+    }
+    for (int pivot = 0; pivot < 4; ++pivot) {
+        int best = pivot;
+        for (int row = pivot + 1; row < 4; ++row) {
+            if (std::abs(augmented[row][pivot]) > std::abs(augmented[best][pivot])) best = row;
+        }
+        if (std::abs(augmented[best][pivot]) < 1.0e-8F) return identityMatrix();
+        if (best != pivot) {
+            for (int column = 0; column < 8; ++column) std::swap(augmented[pivot][column], augmented[best][column]);
+        }
+        const float divisor = augmented[pivot][pivot];
+        for (int column = 0; column < 8; ++column) augmented[pivot][column] /= divisor;
+        for (int row = 0; row < 4; ++row) {
+            if (row == pivot) continue;
+            const float factor = augmented[row][pivot];
+            for (int column = 0; column < 8; ++column) augmented[row][column] -= factor * augmented[pivot][column];
+        }
+    }
+    Matrix4 result{};
+    for (int row = 0; row < 4; ++row) {
+        for (int column = 0; column < 4; ++column) {
+            result[static_cast<std::size_t>(column * 4 + row)] = augmented[row][column + 4];
         }
     }
     return result;
@@ -1141,6 +1242,7 @@ bool GpuRenderer::initialize(SDL_Window* window, const std::vector<const Mesh*>&
     bloomFragmentInfo.format = SDL_GPU_SHADERFORMAT_MSL;
     bloomFragmentInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
     bloomFragmentInfo.num_samplers = 2;
+    bloomFragmentInfo.num_uniform_buffers = 1;
     SDL_GPUShader* bloomFragmentShader = SDL_CreateGPUShader(device_, &bloomFragmentInfo);
     if (bloomFragmentShader == nullptr) {
         setError("SDL_CreateGPUShader(bloom fragment)");
@@ -1600,6 +1702,15 @@ bool GpuRenderer::renderFrame(
     const SDL_GPUTextureSamplerBinding ssaoBinding{ssaoDepthTexture_, shadowSampler_};
     SDL_BindGPUFragmentSamplers(compositePass, 0, &sceneBinding, 1);
     SDL_BindGPUFragmentSamplers(compositePass, 1, &ssaoBinding, 1);
+    CompositeConstants compositeConstants{};
+    compositeConstants.viewProjection = viewProjection;
+    compositeConstants.inverseViewProjection = inverseMatrix(viewProjection);
+    compositeConstants.cameraPosition[0] = camera.x();
+    compositeConstants.cameraPosition[1] = camera.y();
+    compositeConstants.cameraPosition[2] = camera.z();
+    compositeConstants.cameraPosition[3] = 1.0F;
+    SDL_PushGPUFragmentUniformData(commandBuffer, 0, &compositeConstants,
+        static_cast<Uint32>(sizeof(compositeConstants)));
     SDL_DrawGPUPrimitives(compositePass, 3, 1, 0, 0);
     if (showTouchControls && overlayPipeline_ != nullptr) {
         drawOverlay(commandBuffer, compositePass, width, height, movementActive, movementX, movementY,
