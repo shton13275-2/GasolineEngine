@@ -181,12 +181,13 @@ jobs:
 
           jobs_json=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?per_page=100")
           job_report=$(jq -r '
-            [.jobs[] |
+            [.jobs[] | select(.name != "Discord Notification") |
               "• **" + .name + "** — " + (.conclusion // .status // "unknown") +
               (if ([.steps[]?] | length) > 0 then
-                "\\n" + ([.steps[] | "  - " + .name + ": " + (.conclusion // .status // "unknown")] | join("\\n"))
+                "\n" + ([.steps[] | "  - " + .name + ": " + (.conclusion // .status // "unknown")] | join("\n"))
               else "" end)
-            ] | join("\\n\\n")
+            ] | join("\n\n")
+            | if length > 1000 then .[0:970] + "\n… (truncated; see Actions run)" else . end
           ' <<< "$jobs_json")
 
           started_at=$(jq -r '[.jobs[].started_at // empty] | sort | first // empty' <<< "$jobs_json")
@@ -216,12 +217,13 @@ jobs:
             '{
               embeds: [{
                 title: "GasolineEngine — Detailed Build Report",
-                description: ("**Overall:** " +
+                description: (("**Overall:** " +
                   (if ([$windows, $ios] | all(. == "success")) then "SUCCESS" else "CHECK REQUIRED" end) +
-                  "\\n**Workflow:** " + $workflow +
-                  "\\n**Branch:** " + $branch +
-                  "\\n**Commit:** [" + ($commit[0:7]) + "](" + $url + ")" +
-                  "\\n**Message:** " + $message),
+                  "\n**Workflow:** " + $workflow +
+                  "\n**Branch:** " + $branch +
+                  "\n**Commit:** [" + ($commit[0:7]) + "](" + $url + ")" +
+                  "\n**Message:** " + $message) |
+                  if length > 4000 then .[0:3970] + "…" else . end),
                 color: (if ([$windows, $ios] | all(. == "success")) then 5763719 else 15548997 end),
                 fields: [
                   {name: "Windows", value: $windows, inline: true},
@@ -237,7 +239,23 @@ jobs:
               }]
             }')
 
-          curl --fail --silent --show-error \
+          if ! jq -e '
+            .embeds as $embeds
+            | ($embeds | length <= 10)
+            and all($embeds[];
+              ((.title // "" | length) <= 256)
+              and ((.description // "" | length) <= 4096)
+              and ((.fields // [] | length) <= 25)
+              and all(.fields[]?; ((.name | length) <= 256) and ((.value | length) <= 1024))
+              and (([.title // "", .description // "", (.fields[]? | .name, .value), (.footer.text // "")] | map(length) | add) <= 6000)
+            )
+          ' <<< "$payload" >/dev/null; then
+            echo "::error::Generated Discord embed exceeds Discord's message limits."
+            jq -r '.embeds[] | "description length: \((.description // "") | length)", (.fields[]? | "field \(.name): \((.value // "") | length) characters")' <<< "$payload"
+            exit 1
+          fi
+
+          curl --fail-with-body --silent --show-error \
             -H "Content-Type: application/json" \
             -d "$payload" \
             "$DISCORD_WEBHOOK_URL"
