@@ -159,7 +159,23 @@ fragment float4 main_fragment(
     const float directionalStrength = floorSurface ? 0.16 : 0.30;
     const float3 lighting = albedo * (ambientStrength + directionalDiffuse * directionalStrength) +
         emission + float3(directionalSpecular) + pointLight;
-    return float4(lighting, 1.0);
+
+    // Approximate the cube's soft directional shadow on the horizontal floor.
+    // The shadow is projected opposite the directional light and fades at its edge.
+    float shadowVisibility = 1.0;
+    if (floorSurface) {
+        const float shadowHeight = max(
+            input.pointLightPositionRange.y - input.worldPosition.y, 0.0);
+        const float2 shadowCenter = input.pointLightPositionRange.xz -
+            directionalLight.xz * (shadowHeight / max(directionalLight.y, 0.1));
+        const float2 shadowCoordinates =
+            (input.worldPosition.xz - shadowCenter) / float2(1.1, 1.45);
+        const float shadowDistanceSquared = dot(shadowCoordinates, shadowCoordinates);
+        const float shadowOpacity =
+            (1.0 - smoothstep(0.12, 1.0, shadowDistanceSquared)) * 0.48;
+        shadowVisibility = 1.0 - shadowOpacity;
+    }
+    return float4(lighting * shadowVisibility, 1.0);
 }
 )metal";
 
@@ -207,26 +223,33 @@ fragment float4 bloom_fragment(
     sampler sceneSampler [[sampler(0)]])
 {
     const float2 texel = 1.0 / float2(sceneTexture.get_width(), sceneTexture.get_height());
-    const float2 offsets[9] = {
+    // A wider 13-tap radial kernel spreads bright cyan highlights farther
+    // without adding another render target or blur pass.
+    const float2 offsets[13] = {
         float2(0.0, 0.0),
-        float2(1.5, 0.0), float2(-1.5, 0.0),
-        float2(0.0, 1.5), float2(0.0, -1.5),
-        float2(3.0, 0.0), float2(-3.0, 0.0),
-        float2(0.0, 3.0), float2(0.0, -3.0)
+        float2(2.0, 0.0), float2(-2.0, 0.0),
+        float2(0.0, 2.0), float2(0.0, -2.0),
+        float2(3.5, 3.5), float2(-3.5, 3.5),
+        float2(3.5, -3.5), float2(-3.5, -3.5),
+        float2(7.0, 0.0), float2(-7.0, 0.0),
+        float2(0.0, 7.0), float2(0.0, -7.0)
     };
-    const float weights[9] = {
-        0.20, 0.12, 0.12, 0.12, 0.12, 0.05, 0.05, 0.05, 0.05
+    const float weights[13] = {
+        0.18,
+        0.10, 0.10, 0.10, 0.10,
+        0.07, 0.07, 0.07, 0.07,
+        0.035, 0.035, 0.035, 0.035
     };
     const float3 base = sceneTexture.sample(sceneSampler, input.uv).rgb;
     float3 glow = float3(0.0);
-    for (uint index = 0; index < 9; ++index) {
+    for (uint index = 0; index < 13; ++index) {
         const float3 sampleColor = sceneTexture.sample(
             sceneSampler, input.uv + offsets[index] * texel).rgb;
         const float brightness = max(sampleColor.r, max(sampleColor.g, sampleColor.b));
-        const float threshold = smoothstep(0.62, 1.05, brightness);
+        const float threshold = smoothstep(0.55, 1.0, brightness);
         glow += sampleColor * threshold * weights[index];
     }
-    return float4(base + glow * 1.25, 1.0);
+    return float4(base + glow * 1.55, 1.0);
 }
 )metal";
 
