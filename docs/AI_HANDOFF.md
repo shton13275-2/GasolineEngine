@@ -765,3 +765,12 @@ GPU shadow target format fallback — 2026-11-03
 - This is a depth-derived screen-space approximation, not a full material-aware SSR implementation: it does not have a per-pixel normal/roughness buffer, does not use the PBR roughness values to blur/refine reflections, and cannot reflect off-screen or occluded geometry. Depth discontinuities and screen-edge clipping can produce missing/unstable reflections.
 - The composite now receives inverse view-projection, view-projection, and camera position through one fragment uniform buffer. Existing SSAO, bloom, and ACES tone mapping are retained after reflection composition.
 - The normal C++ CI does not compile embedded MSL at runtime. Verify the new shader on a physical iPhone before claiming Metal runtime or visual success. The preceding Shadow Mapping and SSAO visuals were reported by the user as drawing normally on-device.
+
+
+### SSR depth-hit stability correction — 2026-11-03
+
+- User reported that the first SSR result looked like multiple stacked reflection layers and visually filled the gap directly below the cube.
+- Source inspection found that the first ray marcher accepted any single projected depth sample behind scene depth within a relatively broad 0.018 depth interval. It did not require a front-to-back crossing between consecutive ray samples, making silhouette/depth-discontinuity false hits possible.
+- Tightened the surface mask toward horizontal surfaces, increased the normal origin bias, skipped the near-field region, reduced reflection intensity, and changed hit detection to require a consecutive-sample depth-delta crossing. Four binary-refinement steps refine the first crossing.
+- Background samples are treated as being in front of the scene geometry; a hit cannot be accepted until a prior ray sample exists. This avoids accepting the first visible depth sample as an intersection by default.
+- This is a source-level correction only. Verify the resulting reflection on a physical iPhone; CI does not compile the embedded MSL shader at runtime or judge reflection appearance.
