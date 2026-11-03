@@ -266,3 +266,10 @@ The GPU renderer no longer draws an expanded cube shell for a silhouette rim. Th
 ### Floor and cube color separation
 
 The floor uses a darker blue-teal material, while the rotating cube keeps the bright cyan treatment. The GPU renderer selects the floor material through a per-instance uniform flag rather than inferring it from surface normals, so horizontal cube faces keep the cube material. The CPU floor mesh and grid are also darker than the cube.
+
+
+## GPU bloom and soft shadow update
+
+- Expanded the screen-space bloom composite from a compact 9-tap cross to a 13-tap kernel with diagonal and wider-radius samples, a slightly lower highlight threshold, and a stronger glow contribution. The effect remains a single-pass screen-space approximation; it does not add an HDR target or a multi-pass Gaussian blur.
+- Added a soft analytic shadow approximation to the GPU floor shader. It projects an elliptical shadow from the rotating cube onto the horizontal floor opposite the directional light, with a smooth edge and partial opacity. This is not a shadow map and does not cast shadows onto arbitrary meshes.
+- The changes are source-level only until the matching GitHub Actions run completes and the resulting IPA is checked on a physical iPhone. CI does not compile the embedded MSL at runtime or verify the visual result.
