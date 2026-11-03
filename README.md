@@ -339,3 +339,10 @@ The directional shadow map prefers `R32_FLOAT` when the GPU supports it as a sam
 - Replaced the one-sided depth-neighbor normal estimate with four-neighbor tangent selection. For each screen axis, the shader chooses the shorter valid world-space neighbor segment rather than blindly crossing a foreground/background silhouette.
 - SSR is rejected for pixels whose selected tangent lengths exceed 0.35 world units, preventing depth-discontinuity-derived normals from being treated as reflective floor surfaces.
 - This is a source-level stability guard. It does not remove inherent SSR limitations, and the visible result still requires testing on the target iPhone.
+
+
+### SSR reflective-surface mask correction — 2026-11-04
+
+- The demo scene's only intended reflective surface is the explicit floor mesh at world Y = -1.5. SSR now uses that known plane and a fixed upward normal instead of treating every screen-space near-horizontal surface as reflective.
+- This prevents horizontal faces of the rotating cube and other mesh facets from being selected as reflection receivers. Reflection hit tracing still uses the camera-depth prepass and retains normal SSR screen-space limitations.
+- This is source-level only; Metal runtime compilation and the visual result require a new IPA and physical-device verification.
