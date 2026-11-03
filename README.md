@@ -106,6 +106,8 @@ ctest --test-dir build -C Release --output-on-failure
 
 GitHub Actions can compile the Windows app and run automated tests, but it cannot show the interactive window inside the build log. You need a Windows device to run and visually inspect the executable.
 
+On `ios/initial-support`, the workflow also sends a Discord build report after the iOS unsigned IPA job succeeds. The report includes the Windows and iOS job results, excludes the notification job itself, and keeps embed fields within Discord's message limits. A Discord delivery error can fail the overall workflow even when both build jobs succeed; inspect the individual job results to distinguish build status from notification status.
+
 ## Project layout
 
 ```text
