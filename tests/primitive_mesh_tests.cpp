@@ -23,6 +23,16 @@ int main() {
             assert(index < cube.vertices.size());
         }
     }
+    const originalengine::Mesh emissiveCube = originalengine::makeEmissiveCubeMesh();
+    assert(emissiveCube.vertices.size() == 24);
+    assert(emissiveCube.triangles.size() == 12);
+    for (const auto& vertex : emissiveCube.vertices) {
+        assert(vertex.hasNormal);
+        assert(!vertex.hasTexCoord);
+        assert(vertex.u == 0.0F);
+        assert(vertex.v == 0.0F);
+    }
+
     const auto initial = originalengine::makeDemoCubeTransform(0.0);
     assert(std::abs(initial.position.x) < 1.0e-6F);
     assert(std::abs(initial.position.y) < 1.0e-6F);
