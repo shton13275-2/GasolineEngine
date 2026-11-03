@@ -282,3 +282,11 @@ The floor uses a darker blue-teal material, while the rotating cube keeps the br
 - Reduced the GPU screen-space bloom from the wide 13-tap kernel to a restrained 9-tap cross, raised the highlight threshold from 0.55–1.0 to 0.82–1.20, and reduced the composite gain from 1.55 to 0.55.
 - Added a separate per-object emissive flag. Only the rotating cube mesh (mesh range 1, also used as the point-light position source) receives the strong cyan emission. Pyramid meshes no longer receive the generic non-floor emission; they use ambient, directional and attenuated point-light shading instead.
 - The change is source-level. The current iOS/Windows CI does not compile the embedded MSL at runtime or verify the visual appearance on a physical iPhone.
+
+
+## GPU metallic-roughness PBR — 2026-11-03
+
+- Extended the shared `SceneRenderItem` with per-item metallic and roughness values. CPU rendering continues to consume the same shared item list and ignores GPU-only material parameters.
+- Replaced the GPU renderer's Blinn-Phong direct-light terms with a single-pass Cook-Torrance BRDF using GGX normal distribution, Smith-Schlick geometry, and Schlick Fresnel for directional and point lighting.
+- Demo material settings: pyramids metallic 0.05 / roughness 0.72, emissive cube metallic 0.35 / roughness 0.24, floor metallic 0.0 / roughness 0.92. Values are clamped before being sent to the shader.
+- This is metallic-roughness PBR lighting with the current single shared base-color texture and cyan material tint. It does not add an environment map, image-based lighting, normal maps, tone mapping, or per-material texture loading. Metal shader runtime compilation and appearance remain unverified on a physical iPhone.
