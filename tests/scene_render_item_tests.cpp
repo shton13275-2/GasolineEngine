@@ -17,7 +17,7 @@ int main() {
     }
 
     const originalengine::SceneRenderItem shared{
-        &mesh, object, "assets/shared.ppm", 3, true, true
+        &mesh, object, "assets/shared.ppm", 3, true, true, 0.35F, 0.42F
     };
     const originalengine::SceneRenderItem gpuOnly{
         &mesh, object, {}, 4, false, true
@@ -28,7 +28,8 @@ int main() {
 
     if (shared.mesh != &mesh || shared.object != object ||
         shared.texturePath != "assets/shared.ppm" || shared.gpuMeshIndex != 3 ||
-        !shared.renderOnCpu || !shared.renderOnGpu) {
+        !shared.renderOnCpu || !shared.renderOnGpu ||
+        shared.metallic != 0.35F || shared.roughness != 0.42F) {
         std::cerr << "Shared render item did not preserve its bindings.\n";
         return 1;
     }
@@ -36,7 +37,8 @@ int main() {
         std::cerr << "GPU-only render item flags are incorrect.\n";
         return 1;
     }
-    if (!cpuOnly.renderOnCpu || cpuOnly.renderOnGpu) {
+    if (!cpuOnly.renderOnCpu || cpuOnly.renderOnGpu ||
+        cpuOnly.metallic != 0.0F || cpuOnly.roughness != 0.55F) {
         std::cerr << "CPU-only render item flags are incorrect.\n";
         return 1;
     }
