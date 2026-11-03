@@ -720,3 +720,10 @@ The earlier implementation drew an expanded cube shell at 1.16x scale with front
 - Set demo values explicitly: pyramid 0.05/0.72, emissive cube 0.35/0.24, floor 0.0/0.92 (metallic/roughness).
 - Extended the shared-scene-item test to verify material values and defaults.
 - This is the first PBR stage. Environment-map/image-based lighting, normal maps, tone mapping, and distinct GPU texture/material resources remain unimplemented. CI does not compile the embedded MSL at runtime; actual Metal shader compilation and visual validation require a physical iPhone.
+
+
+## GPU HDR scene target — 2026-11-03
+
+- The GPU renderer now prefers an `R16G16B16A16_FLOAT` intermediate scene color target when the device reports support for both color-target and sampler usage. If unavailable, it retains the swapchain-format intermediate target.
+- The scene pipeline and optional 4x MSAA color target use the selected scene format; the final composite remains in the swapchain format. The composite applies an ACES-fitted tone map after the existing bloom contribution.
+- This is a capability-gated HDR render-target path. It does not add exposure adaptation or a separate multi-pass bloom pyramid. Metal format support, HDR highlight appearance, and memory/performance on iPhone hardware still require device verification.
