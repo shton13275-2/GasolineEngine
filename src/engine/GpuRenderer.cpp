@@ -505,7 +505,7 @@ Matrix4 normalMatrix(const Transform& transform) {
 }
 
 Matrix4 shadowViewProjection() {
-    const Vec3 eye{4.5F,8.0F,5.0F}, target{0.0F,0.0F,0.0F};
+    const Vec3 eye{-4.5F,8.0F,-5.0F}, target{0.0F,0.0F,0.0F};
     const auto norm=[](Vec3 v){const float n=std::sqrt(v.x*v.x+v.y*v.y+v.z*v.z);return n>1e-5F?Vec3{v.x/n,v.y/n,v.z/n}:Vec3{};};
     const auto dot=[](Vec3 a,Vec3 b){return a.x*b.x+a.y*b.y+a.z*b.z;};
     const Vec3 f=norm({target.x-eye.x,target.y-eye.y,target.z-eye.z}),r=norm({f.z,0.0F,-f.x});
@@ -1169,7 +1169,8 @@ bool GpuRenderer::initialize(SDL_Window* window, const std::vector<const Mesh*>&
 bool GpuRenderer::createShadowMap() {
     const SDL_GPUTextureUsageFlags usage=SDL_GPU_TEXTUREUSAGE_COLOR_TARGET|SDL_GPU_TEXTUREUSAGE_SAMPLER;
     if(!SDL_GPUTextureSupportsFormat(device_,SDL_GPU_TEXTUREFORMAT_R32_FLOAT,SDL_GPU_TEXTURETYPE_2D,usage)){
-        shadowMappingEnabled_=false;return true;
+        lastError_ = "GPU does not support a sampleable R32_FLOAT shadow target";
+        return false;
     }
     SDL_GPUTextureCreateInfo ci{};ci.type=SDL_GPU_TEXTURETYPE_2D;ci.format=SDL_GPU_TEXTUREFORMAT_R32_FLOAT;
     ci.usage=usage;ci.width=shadowMapSize_;ci.height=shadowMapSize_;ci.layer_count_or_depth=1;
@@ -1349,6 +1350,7 @@ bool GpuRenderer::renderFrame(
     SDL_BindGPUIndexBuffer(pass, &indexBinding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
     const SDL_GPUTextureSamplerBinding colorBinding{colorTexture_, colorSampler_};
     SDL_BindGPUFragmentSamplers(pass, 0, &colorBinding, 1);
+    SDL_EndGPURenderPass(pass);
     const Matrix4 lightVP=shadowViewProjection();
     if(shadowMappingEnabled_){
         SDL_GPUColorTargetInfo sc{};sc.texture=shadowColorTexture_;sc.clear_color=SDL_FColor{1,1,1,1};
@@ -1369,8 +1371,18 @@ bool GpuRenderer::renderFrame(
             SDL_DrawGPUIndexedPrimitives(sp,range.indexCount,1,range.firstIndex,0,0);
         }
         SDL_EndGPURenderPass(sp);
-        const SDL_GPUTextureSamplerBinding sb{shadowColorTexture_,shadowSampler_};
-        SDL_BindGPUFragmentSamplers(pass,1,&sb,1);
+    }
+    colorTarget.load_op = SDL_GPU_LOADOP_LOAD;
+    depthTarget.load_op = SDL_GPU_LOADOP_LOAD;
+    pass = SDL_BeginGPURenderPass(commandBuffer, &colorTarget, 1, &depthTarget);
+    if (!pass) { setError("SDL_BeginGPURenderPass(scene after shadow)"); (void)SDL_SubmitGPUCommandBuffer(commandBuffer); return false; }
+    SDL_BindGPUGraphicsPipeline(pass, wireframe ? wireframePipeline_ : pipeline_);
+    SDL_BindGPUVertexBuffers(pass, 0, &vertexBinding, 1);
+    SDL_BindGPUIndexBuffer(pass, &indexBinding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
+    SDL_BindGPUFragmentSamplers(pass, 0, &colorBinding, 1);
+    if (shadowMappingEnabled_) {
+        const SDL_GPUTextureSamplerBinding sb{shadowColorTexture_, shadowSampler_};
+        SDL_BindGPUFragmentSamplers(pass, 1, &sb, 1);
     }
 
     const Matrix4 view = viewMatrix(camera);
