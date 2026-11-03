@@ -8,6 +8,18 @@
 namespace originalengine {
 
 // Creates a six-sided cube with independent face vertices, outward normals,
+// and no texture coordinates, for use with a solid emissive material.
+[[nodiscard]] inline Mesh makeEmissiveCubeMesh(float halfExtent = 1.0F) {
+    Mesh mesh = makeTexturedCubeMesh(halfExtent);
+    for (MeshVertex& vertex : mesh.vertices) {
+        vertex.hasTexCoord = false;
+        vertex.u = 0.0F;
+        vertex.v = 0.0F;
+    }
+    return mesh;
+}
+
+// Creates a six-sided cube with independent face vertices, outward normals,
 // and a complete 0..1 UV square on every face.
 [[nodiscard]] inline Mesh makeTexturedCubeMesh(float halfExtent = 1.0F) {
     struct Face {
