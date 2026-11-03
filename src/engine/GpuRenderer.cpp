@@ -252,7 +252,7 @@ vertex float4 shadow_vertex(ShadowInput in [[stage_in]], constant ShadowConstant
 constexpr char shadowFragmentSource[] = R"metal(
 #include <metal_stdlib>
 using namespace metal;
-fragment float shadow_fragment(float4 position [[position]]) { return position.z; }
+fragment float4 shadow_fragment(float4 position [[position]]) { return float4(position.z, 0.0, 0.0, 1.0); }
 )metal";
 
 constexpr char bloomVertexSource[] = R"metal(
@@ -1027,7 +1027,7 @@ bool GpuRenderer::initialize(SDL_Window* window, const std::vector<const Mesh*>&
         sf.format=SDL_GPU_SHADERFORMAT_MSL; sf.stage=SDL_GPU_SHADERSTAGE_FRAGMENT;
         SDL_GPUShader* fs=vs?SDL_CreateGPUShader(device_,&sf):nullptr;
         if(!vs||!fs){if(vs)SDL_ReleaseGPUShader(device_,vs);if(fs)SDL_ReleaseGPUShader(device_,fs);setError("SDL_CreateGPUShader(shadow)");shutdown();return false;}
-        SDL_GPUColorTargetDescription ct{};ct.format=SDL_GPU_TEXTUREFORMAT_R32_FLOAT;
+        SDL_GPUColorTargetDescription ct{};ct.format=shadowColorFormat_;
         SDL_GPUGraphicsPipelineCreateInfo pi{};pi.vertex_shader=vs;pi.fragment_shader=fs;
         pi.vertex_input_state.vertex_buffer_descriptions=&vertexBufferDescription;pi.vertex_input_state.num_vertex_buffers=1;
         pi.vertex_input_state.vertex_attributes=attributes;pi.vertex_input_state.num_vertex_attributes=5;
@@ -1167,24 +1167,69 @@ bool GpuRenderer::initialize(SDL_Window* window, const std::vector<const Mesh*>&
 }
 
 bool GpuRenderer::createShadowMap() {
-    const SDL_GPUTextureUsageFlags usage=SDL_GPU_TEXTUREUSAGE_COLOR_TARGET|SDL_GPU_TEXTUREUSAGE_SAMPLER;
-    if(!SDL_GPUTextureSupportsFormat(device_,SDL_GPU_TEXTUREFORMAT_R32_FLOAT,SDL_GPU_TEXTURETYPE_2D,usage)){
-        lastError_ = "GPU does not support a sampleable R32_FLOAT shadow target";
+    const SDL_GPUTextureUsageFlags usage =
+        SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+
+    // Prefer single-channel precision, but do not make GPU activation depend
+    // on R32_FLOAT render-target support. RGBA8 is the portable fallback.
+    shadowColorFormat_ = SDL_GPU_TEXTUREFORMAT_INVALID;
+    constexpr SDL_GPUTextureFormat candidates[]{
+        SDL_GPU_TEXTUREFORMAT_R32_FLOAT,
+        SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM
+    };
+    for (const SDL_GPUTextureFormat format : candidates) {
+        if (SDL_GPUTextureSupportsFormat(
+                device_, format, SDL_GPU_TEXTURETYPE_2D, usage)) {
+            shadowColorFormat_ = format;
+            break;
+        }
+    }
+    if (shadowColorFormat_ == SDL_GPU_TEXTUREFORMAT_INVALID) {
+        lastError_ = "GPU does not support a sampleable shadow color target";
         return false;
     }
-    SDL_GPUTextureCreateInfo ci{};ci.type=SDL_GPU_TEXTURETYPE_2D;ci.format=SDL_GPU_TEXTUREFORMAT_R32_FLOAT;
-    ci.usage=usage;ci.width=shadowMapSize_;ci.height=shadowMapSize_;ci.layer_count_or_depth=1;
-    ci.num_levels=1;ci.sample_count=SDL_GPU_SAMPLECOUNT_1;shadowColorTexture_=SDL_CreateGPUTexture(device_,&ci);
-    SDL_GPUTextureCreateInfo di{};di.type=SDL_GPU_TEXTURETYPE_2D;di.format=depthFormat_;
-    di.usage=SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET;di.width=shadowMapSize_;di.height=shadowMapSize_;
-    di.layer_count_or_depth=1;di.num_levels=1;di.sample_count=SDL_GPU_SAMPLECOUNT_1;
-    shadowDepthTexture_=SDL_CreateGPUTexture(device_,&di);
-    if(!shadowColorTexture_||!shadowDepthTexture_){setError("SDL_CreateGPUTexture(shadow)");return false;}
-    SDL_GPUSamplerCreateInfo si{};si.min_filter=SDL_GPU_FILTER_NEAREST;si.mag_filter=SDL_GPU_FILTER_NEAREST;
-    si.mipmap_mode=SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;si.address_mode_u=SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
-    si.address_mode_v=SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;si.address_mode_w=SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
-    shadowSampler_=SDL_CreateGPUSampler(device_,&si);if(!shadowSampler_){setError("SDL_CreateGPUSampler(shadow)");return false;}
-    shadowMappingEnabled_=true;return true;
+
+    SDL_GPUTextureCreateInfo colorInfo{};
+    colorInfo.type = SDL_GPU_TEXTURETYPE_2D;
+    colorInfo.format = shadowColorFormat_;
+    colorInfo.usage = usage;
+    colorInfo.width = shadowMapSize_;
+    colorInfo.height = shadowMapSize_;
+    colorInfo.layer_count_or_depth = 1;
+    colorInfo.num_levels = 1;
+    colorInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
+    shadowColorTexture_ = SDL_CreateGPUTexture(device_, &colorInfo);
+
+    SDL_GPUTextureCreateInfo depthInfo{};
+    depthInfo.type = SDL_GPU_TEXTURETYPE_2D;
+    depthInfo.format = depthFormat_;
+    depthInfo.usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET;
+    depthInfo.width = shadowMapSize_;
+    depthInfo.height = shadowMapSize_;
+    depthInfo.layer_count_or_depth = 1;
+    depthInfo.num_levels = 1;
+    depthInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
+    shadowDepthTexture_ = SDL_CreateGPUTexture(device_, &depthInfo);
+    if (shadowColorTexture_ == nullptr || shadowDepthTexture_ == nullptr) {
+        setError("SDL_CreateGPUTexture(shadow)");
+        return false;
+    }
+
+    SDL_GPUSamplerCreateInfo samplerInfo{};
+    samplerInfo.min_filter = SDL_GPU_FILTER_NEAREST;
+    samplerInfo.mag_filter = SDL_GPU_FILTER_NEAREST;
+    samplerInfo.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
+    samplerInfo.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    samplerInfo.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    samplerInfo.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    shadowSampler_ = SDL_CreateGPUSampler(device_, &samplerInfo);
+    if (shadowSampler_ == nullptr) {
+        setError("SDL_CreateGPUSampler(shadow)");
+        return false;
+    }
+
+    shadowMappingEnabled_ = true;
+    return true;
 }
 
 bool GpuRenderer::createDepthTexture(Uint32 width, Uint32 height) {
@@ -1665,6 +1710,7 @@ void GpuRenderer::shutdown() noexcept {
     sceneColorFormat_ = SDL_GPU_TEXTUREFORMAT_INVALID;
     sampleCount_ = SDL_GPU_SAMPLECOUNT_1;
     shadowMappingEnabled_ = false;
+    shadowColorFormat_ = SDL_GPU_TEXTUREFORMAT_INVALID;
     meshRanges_.clear();
 }
 
