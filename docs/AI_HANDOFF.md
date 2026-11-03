@@ -756,3 +756,12 @@ GPU shadow target format fallback — 2026-11-03
 - Extended the final fullscreen composite to sample eight neighboring depth positions. Neighbor samples that are closer than the center pixel contribute occlusion, and the resulting ambient-visibility factor darkens the scene before the existing bloom and ACES-fitted tone mapping.
 - This is a lightweight screen-space depth-neighborhood AO approximation, not a full view-space SSAO implementation: it does not reconstruct view-space positions/normals, use a hemisphere sampling kernel, or apply temporal filtering.
 - The added pass costs one extra geometry depth pass per frame and two screen-sized textures. The normal C++ CI build does not compile embedded MSL; Metal runtime shader compilation, sampling, visual quality, and iPhone performance remain to be checked on-device.
+
+
+## GPU screen-space reflections (SSR) — 2026-11-03
+
+- Added an SSR ray-march to the existing fullscreen GPU composite. The shader reconstructs world position from the camera-depth texture using an inverse view-projection matrix, estimates a world-space normal from adjacent depth samples, reflects the camera ray, and marches up to 24 screen-projected steps against the scene depth buffer.
+- The initial pass is deliberately conservative and focuses on near-horizontal surfaces, allowing the demo floor to reflect visible scene color. Reflection intensity is fixed and fades toward screen edges and longer ray distances. It reuses the existing scene color/depth textures and does not add another render target or geometry pass.
+- This is a depth-derived screen-space approximation, not a full material-aware SSR implementation: it does not have a per-pixel normal/roughness buffer, does not use the PBR roughness values to blur/refine reflections, and cannot reflect off-screen or occluded geometry. Depth discontinuities and screen-edge clipping can produce missing/unstable reflections.
+- The composite now receives inverse view-projection, view-projection, and camera position through one fragment uniform buffer. Existing SSAO, bloom, and ACES tone mapping are retained after reflection composition.
+- The normal C++ CI does not compile embedded MSL at runtime. Verify the new shader on a physical iPhone before claiming Metal runtime or visual success. The preceding Shadow Mapping and SSAO visuals were reported by the user as drawing normally on-device.
