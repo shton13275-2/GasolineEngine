@@ -352,3 +352,13 @@ The directional shadow map prefers `R32_FLOAT` when the GPU supports it as a sam
 
 - Increased the screen-space reflection march from 32 to 64 samples and reduced world-space spacing from 0.075 to 0.035, with a 0.12 near-origin offset. The maximum trace distance remains approximately 2.3 world units.
 - This targets discontinuous/combed reflection silhouettes caused by coarse ray steps. It does not change the depth reconstruction or intersection model; visual improvement and iPhone GPU cost still require device verification.
+
+
+### Physical-device SSR verification — 2026-11-04
+
+- The user confirmed that the supplied iPhone screenshot was captured with an IPA containing commit `2e2c73a` (the floor-only SSR receiver mask correction).
+- The screenshot still shows a repeated/combed cyan reflection image below the cube, with strong horizontal/vertical banding and dark rectangular patches on the floor. The reflection remains visibly incorrect; do not describe SSR as fixed.
+- This physical result demonstrates that restricting the reflective receiver to the known floor plane did not resolve the artifact. The earlier hypothesis that cube faces were being selected as reflection receivers is insufficient as the sole explanation.
+- Keep the issue open. Next investigation should validate the camera-depth prepass encoding/format and sampling, screen-UV to clip/NDC conventions, inverse view-projection reconstruction, and the ray-depth intersection comparison against the exact projection/depth convention. Add temporary debug views for raw depth, reconstructed world position, ray UV, and hit mask before further tuning.
+- The later source change that increases the SSR march density (32 to 64 steps, spacing 0.075 to 0.035) is a separate source-level change; this screenshot does not verify that later change unless the tested IPA is confirmed to contain it.
+- CI/IPA packaging does not compile embedded MSL at runtime or validate the rendered image. Record physical-device validation separately from CI success.
