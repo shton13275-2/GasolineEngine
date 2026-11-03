@@ -290,3 +290,10 @@ The floor uses a darker blue-teal material, while the rotating cube keeps the br
 - Replaced the GPU renderer's Blinn-Phong direct-light terms with a single-pass Cook-Torrance BRDF using GGX normal distribution, Smith-Schlick geometry, and Schlick Fresnel for directional and point lighting.
 - Demo material settings: pyramids metallic 0.05 / roughness 0.72, emissive cube metallic 0.35 / roughness 0.24, floor metallic 0.0 / roughness 0.92. Values are clamped before being sent to the shader.
 - This is metallic-roughness PBR lighting with the current single shared base-color texture and cyan material tint. It does not add an environment map, image-based lighting, normal maps, tone mapping, or per-material texture loading. Metal shader runtime compilation and appearance remain unverified on a physical iPhone.
+
+
+## GPU HDR scene target — 2026-11-03
+
+- The GPU renderer now prefers an `R16G16B16A16_FLOAT` intermediate scene color target when the device reports support for both color-target and sampler usage. If unavailable, it retains the swapchain-format intermediate target.
+- The scene pipeline and optional 4x MSAA color target use the selected scene format; the final composite remains in the swapchain format. The composite applies an ACES-fitted tone map after the existing bloom contribution.
+- This is a capability-gated HDR render-target path. It does not add exposure adaptation or a separate multi-pass bloom pyramid. Metal format support, HDR highlight appearance, and memory/performance on iPhone hardware still require device verification.
