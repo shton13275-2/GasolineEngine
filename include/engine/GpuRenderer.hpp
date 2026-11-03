@@ -10,13 +10,9 @@
 #include "engine/Mesh.hpp"
 #include "engine/PpmImageLoader.hpp"
 #include "engine/Scene.hpp"
+#include "engine/SceneRenderItem.hpp"
 
 namespace originalengine {
-
-struct GpuMeshInstance {
-    std::size_t meshIndex{0};
-    const SceneObject* object{nullptr};
-};
 
 // SDL_GPU renderer for indexed triangle meshes and the shared scene camera.
 // Mesh data is uploaded once during initialization; per-object MVP uniforms are
@@ -31,7 +27,7 @@ public:
 
     [[nodiscard]] bool initialize(SDL_Window* window, const std::vector<const Mesh*>& meshes, const RgbaImage& texture);
     [[nodiscard]] bool renderFrame(
-        const Camera& camera, const std::vector<GpuMeshInstance>& instances,
+        const Camera& camera, const std::vector<SceneRenderItem>& renderItems,
         bool showTouchControls = true, bool movementActive = false,
         float movementX = 0.0F, float movementY = 0.0F,
         float framesPerSecond = 0.0F, bool wireframe = false);
