@@ -67,6 +67,7 @@ private:
     SDL_GPUTexture* ssaoDepthTexture_{nullptr};
     SDL_GPUTexture* ssaoDepthAttachmentTexture_{nullptr};
     SDL_GPUTextureFormat shadowColorFormat_{SDL_GPU_TEXTUREFORMAT_INVALID};
+    bool shadowDepthPacked_{false};
     SDL_GPUSampler* shadowSampler_{nullptr};
     static constexpr Uint32 shadowMapSize_ = 1024;
     SDL_GPUTexture* sceneColorTexture_{nullptr};
