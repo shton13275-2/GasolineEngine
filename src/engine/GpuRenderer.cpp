@@ -343,6 +343,9 @@ fragment float4 bloom_fragment(
         const float screenFade = smoothstep(0.025, 0.14, edgeFade);
         float previousRayDepth = centerDepth;
         float previousRayDistance = 0.0;
+        float previousDepthDelta = -1.0;
+        float hitDistance = 0.0;
+        bool hasPreviousSample = false;
         float2 hitUV = float2(0.0);
         bool hitFound = false;
 
