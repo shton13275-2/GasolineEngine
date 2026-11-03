@@ -90,3 +90,11 @@ Keyboard input **G** requests a backend switch. The touch interface also has a t
 - Keep the issue open. Next investigation should validate the camera-depth prepass encoding/format and sampling, screen-UV to clip/NDC conventions, inverse view-projection reconstruction, and the ray-depth intersection comparison against the exact projection/depth convention. Add temporary debug views for raw depth, reconstructed world position, ray UV, and hit mask before further tuning.
 - The later source change that increases the SSR march density (32 to 64 steps, spacing 0.075 to 0.035) is a separate source-level change; this screenshot does not verify that later change unless the tested IPA is confirmed to contain it.
 - CI/IPA packaging does not compile embedded MSL at runtime or validate the rendered image. Record physical-device validation separately from CI success.
+
+
+### SSR depth precision fallback — 2026-11-04
+
+- `createShadowMap()` prefers `R32_FLOAT`; when that format is unavailable, it uses `R8G8B8A8_UNORM` for both the camera-depth prepass and directional shadow map.
+- The RGBA8 fallback now packs normalized depth into RGB at 24-bit precision rather than writing depth only to the 8-bit red channel. The packed-format flag is passed through the relevant GPU uniforms/varyings.
+- The composite shader decodes packed depth for the SSR receiver depth, each ray-march sample, binary-refinement samples, and SSAO neighbors. The mesh fragment shader decodes the packed directional shadow-map samples. R32_FLOAT remains unmodified.
+- The change addresses a confirmed precision weakness in the RGBA8 fallback, but the selected format on the target iPhone is not yet known. Embedded MSL runtime compilation and the visual reflection result still require physical-device verification.
