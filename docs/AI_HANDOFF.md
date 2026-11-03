@@ -136,9 +136,9 @@ GitHubには少なくとも次のブランチが存在する。
 - P3 ASCII PPMをRGBA8へ変換するPpmImageLoaderを追加。GPU側でSDL_GPUTextureへ転送し、fragment sampler slot 0へbindする。
 - OBJのUVはGPUへ渡し、画像の行方向に合わせてVを反転する。UVの有無は専用の頂点属性で管理し、負のUV値や0〜1範囲外の有効な座標を欠落扱いしない。UVがない頂点のみテクスチャなしfallbackにする。
 - OBJにvnがある場合はその法線を使用し、ない場合は三角形ごとのflat normalを生成する。
-- per-object uniformにMVP、model、inverse-transpose normal matrix、camera positionを渡す。fragment shaderはambient、directional diffuse、Blinn-Phong specularを計算する。
-- GPU overlayはタッチガイド、FPS、CPU切替ボタンを描画する。CPU側のfallbackは維持する。
-- GPU初期化はMSLを要求するため、Metal対応GPUを主対象とする。Windows CIのコンパイル成功はWindowsでのGPU runtime対応を意味しない。
+- per-object uniformにMVP、model、inverse-transpose normal matrix、camera positionを渡す。fragment shaderはambient、directional diffuse、Blinn-Phong specularに加え、回転キューブの位置を使った減衰付きemissive point lightingを計算する。
+- GPU overlayはタッチガイド、FPS、CPU切替ボタンを描画する。シーンはサンプル可能な中間カラーtextureへ描画され、9-tap screen-space bloomでswapchainへ合成した後、single-sample overlay pipelineでUIを描画する。CPU側のfallbackは維持する。
+- GPU初期化はMSLを要求するため、Metal対応GPUを主対象とする。swapchain color/depth formatが対応する場合は4x MSAAを使い、非対応時はsingle-sampleへfallbackする。Windows CIのコンパイル成功はWindowsでのGPU runtime対応を意味しない。
 
 ### Metal shaderの扱い
 - 現在実行時に使うmesh shaderは `src/engine/GpuRenderer.cpp` 内のMSL文字列。
@@ -149,7 +149,7 @@ GitHubには少なくとも次のブランチが存在する。
 - MTL material parsing、materialごとの複数texture。
 - PNG/JPEG/BMPのGPU texture loader（現GPU loaderはP3 PPMのみ）。
 - mipmapは対応形式で生成し、非対応時は単一レベルへfallbackする。anisotropic filteringとnormal mapは未実装。
-- GPU wireframe modeとCPU/GPU共通Renderer API。
+- CPU/GPU共通Renderer API。GPU wireframeはSDL_GPUのline-fill pipelineで実装済み。
 - iPhone実機でのMetal shader compile、texture sampling、lightingの見た目、タッチ操作。
 - GPU/CPU切替を繰り返した場合の長時間安定性・resource leak。
 - GPU側のFPS/frame-time計測の精度検証。
@@ -173,6 +173,7 @@ GitHubには少なくとも次のブランチが存在する。
 - iOSではSDL_SHARED=OFF、SDL_STATIC=ON。
 - `SDL3::SDL3-static` にリンク。
 - App Bundle identifier: `com.gasolineengine.demo`
+- Xcodeの`PRODUCT_BUNDLE_IDENTIFIER`も同じ値に設定し、CIでbuild settingとIPA内`Info.plist`の両方を検証する。
 - Bundle name: `Gasoline Engine`
 - `SDL_main.h` をmain.cppでincludeすること。過去にSDL_Initのmain entrypoint関連エラーが発生した。
 - iOS向けにOBJ/PPM資産とMetal shader sourceをResourcesに配置する設定がある。
@@ -211,12 +212,12 @@ GitHubには少なくとも次のブランチが存在する。
 | `include/engine/GpuDeviceProbe.hpp` / `src/engine/GpuDeviceProbe.cpp` | SDL_GPU利用可否のProbe |
 | `include/engine/GpuFrameRecovery.hpp` | GPUフレーム失敗後のCPU復帰制御フロー |
 | `include/engine/GpuGeometryRules.hpp` | GPU三角形のUV有無判定ルール |
-| `include/engine/GpuRenderer.hpp` / `src/engine/GpuRenderer.cpp` | SDL_GPU indexed mesh、depth、PPM texture、lighting、overlay |
+| `include/engine/GpuRenderer.hpp` / `src/engine/GpuRenderer.cpp` | SDL_GPU indexed mesh、depth、PPM texture、point lighting、4x MSAA fallback、screen-space bloom、overlay |
 | `shaders/Metal/` | iOS向けMSL shader source（まだmain.cppのGPU previewからは未使用） |
 | `shaders/Source/` | HLSL shader source |
 | `assets/demo.obj` | デモ用ピラミッド |
 | `assets/demo_texture.ppm` | デモ用テクスチャ |
-| `tests/` | カメラ、衝突、シーン、OBJ、PPM、Renderer、GPU復旧、GPUジオメトリ、タッチオーバーレイのテスト |
+| `tests/` | 11 CTest targets: カメラ、衝突、シーン、OBJ、PPM、Renderer、GPU復旧、GPUジオメトリ、タッチオーバーレイ、backend switch input、primitive meshes |
 | `.github/workflows/build.yml` | Windows build/testとiOS unsigned IPA |
 
 ## 7. 操作方法
@@ -247,7 +248,7 @@ GitHubには少なくとも次のブランチが存在する。
 ## 8. 未実装・既知の制限
 
 - GPU rendererはCPU rendererと同じ機能を持たない。
-- GPU mesh描画はOBJとプロシージャルメッシュを複数mesh rangeとして1組のvertex/index bufferへ格納し、SceneObjectごとにmesh rangeを選択して描画する。GPU wireframeや全CPU描画機能の移植は未完了。
+- GPU mesh描画はOBJとプロシージャルメッシュを複数mesh rangeとして1組のvertex/index bufferへ格納し、SceneObjectごとにmesh rangeを選択して描画する。GPU wireframeは実装済み。GPU floor gridや全CPU描画機能の移植は未完了。
 - GPUの実行時mesh shaderはGpuRenderer.cpp内のMSL文字列。shaders/Metal内の別ファイルは実行時ロードしていない。
 - GPU texture samplingはP3 ASCII PPMに対応。現在はアップロード済みmeshで1つのP3テクスチャを共有する。PNG/JPEG/BMPのGPU upload、MTL material parser、materialごとの複数textureは未実装。
 - mipmap生成は対応形式で実装済み。normal mapとanisotropic filteringは未実装。
@@ -274,7 +275,7 @@ GitHubには少なくとも次のブランチが存在する。
 1. MTLのKd/Ks/Nsとmaterialごとのtexture参照を追加。
 2. PNG/JPEG等の画像形式を追加（既存依存関係とiOS bundleを確認して選定）。
 3. mipmap生成とanisotropic filteringを追加。
-4. GPU wireframeとnormal mapを検討。
+4. normal mapとanisotropic filteringを検討。
 5. CPU/GPU共通Renderer APIと描画品質の比較を進める。
 
 ### P3 — 安定性・性能
@@ -340,7 +341,7 @@ GitHubには少なくとも次のブランチが存在する。
 - 失敗があれば実装に入る前に原因を特定する。
 
 ### Step 3: 次の作業を一つ選ぶ
-GPU Rendererの分離、indexed mesh描画、depth、PPM texture、lighting、overlayは既に実装されているため、これらを未実装タスクとして再提案しない。次はP0としてGPU resourceの失敗経路・解放・CPU/GPU切替の回帰テストを検討し、その後P1としてiPhone実機でMetal shader、texture sampling、lighting、touch操作を確認する。実機確認はCIの成功で代替できない。
+GPU Rendererの分離、indexed mesh描画、depth、PPM texture、lighting、overlay、backend-switch input reset、GPU frame-recovery control flowは実装済みで、関連するunit testsも存在する。残るP0は、実際のSDL_GPU failure injection、window-claimのrelease/reclaim、resource lifecycleの検証。P1ではiPhone実機でMetal shader、texture sampling、point lighting、bloom、touch操作を確認する。実機確認はCIの成功で代替できない。
 
 ### Step 4: 実装
 - SDL 3.2.10の実際のAPIヘッダーを確認してから使う。
@@ -664,3 +665,12 @@ The earlier implementation drew an expanded cube shell at 1.16x scale with front
 - The post-process currently uses the swapchain color format (not a dedicated HDR floating-point target) and a compact 9-tap filter. It is a lightweight screen-space bloom approximation, not a multi-pass Gaussian blur, ray tracing, reflected-light simulation, or global illumination.
 - The intermediate scene texture is recreated when the swapchain dimensions change and released during renderer shutdown. The bloom sampler and pipeline are also released during shutdown.
 - Runtime MSL shader compilation, actual Metal render-target sampling/resolve behavior, visual output, and performance have not been verified on a physical iPhone. The Windows CI job does not validate Metal shader compilation.
+
+## iOS bundle identifier alignment and compiler warning cleanup — 2026-11-03
+
+- The previous iOS workflow log reported that the generated Info.plist used `com.gasolineengine.demo` while the Xcode `PRODUCT_BUNDLE_IDENTIFIER` build setting was empty.
+- CMake now sets `XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER` to the same identifier as `MACOSX_BUNDLE_GUI_IDENTIFIER`.
+- The iOS workflow checks the Xcode build setting before compiling and checks the packaged IPA's `CFBundleIdentifier` after packaging.
+- Removed the unnecessary `nearPlane` lambda capture reported by the previous iOS compiler log.
+- Verify the workflow run for the resulting commit before treating the warning as resolved; physical-device startup and Metal rendering remain separate checks.
+

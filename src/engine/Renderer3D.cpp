@@ -739,7 +739,7 @@ bool Renderer3D::render(int width, int height, double elapsedSeconds,
             }
             const bool triangleFullyInFront = std::all_of(
                 sourcePolygon.begin(), sourcePolygon.end(),
-                [nearPlane](const TexturedClipVertex& vertex) {
+                [](const TexturedClipVertex& vertex) {
                     return vertex.position.z > nearPlane;
                 });
             const bool triangleHasTexCoords = meshTexture != nullptr &&

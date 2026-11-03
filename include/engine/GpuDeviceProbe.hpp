@@ -6,9 +6,9 @@
 
 namespace originalengine {
 
-// Creates an unclaimed SDL_GPU device to verify that the current platform has
-// a usable GPU backend. The existing SDL_Renderer keeps ownership of the
-// window until the full GPU presentation path is implemented.
+// Creates an unclaimed SDL_GPU device to report driver and shader capabilities
+// without changing window ownership. GpuRenderer claims the window only when
+// the application requests a CPU/GPU backend switch.
 class GpuDeviceProbe {
 public:
     GpuDeviceProbe() = default;

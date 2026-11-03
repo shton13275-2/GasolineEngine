@@ -73,6 +73,7 @@ if(ORIGINALENGINE_BUILD_APP)
                 MACOSX_BUNDLE TRUE
                 MACOSX_BUNDLE_GUI_IDENTIFIER "com.gasolineengine.demo"
                 MACOSX_BUNDLE_BUNDLE_NAME "Gasoline Engine"
+                XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "com.gasolineengine.demo"
                 XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED "NO"
             )
             set_source_files_properties(

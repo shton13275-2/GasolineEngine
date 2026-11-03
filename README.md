@@ -21,7 +21,7 @@ For a complete, source-oriented handoff covering verified implementation status,
 - Near-plane clipping for cube faces and loaded mesh triangles, preserving the visible portion of geometry that crosses the camera's near plane
 - Animated perspective-projected 3D cube with six face colors and all three rotation axes
 - Renders multiple visible scene objects from shared OBJ mesh data, applying each object's position, rotation, scale, and visibility flag
-- Experimental SDL_GPU backend renders indexed OBJ meshes with depth testing, P3 PPM texture sampling, lighting, mipmap capability fallback, and a GPU touch/FPS overlay; physical-device Metal behavior remains unverified
+- Experimental SDL_GPU backend renders indexed OBJ meshes with depth testing, P3 PPM texture sampling, directional and emissive point lighting, optional 4x MSAA, screen-space bloom, mipmap capability fallback, and a GPU touch/FPS overlay; physical-device Metal behavior remains unverified
 - Press 1 or 2 to toggle the visibility of each demo pyramid at runtime
 - Press F3 to toggle wireframe rendering for the cube and loaded OBJ meshes in both CPU and GPU modes
 - Press F11 to toggle between windowed and fullscreen display
@@ -30,7 +30,7 @@ For a complete, source-oriented handoff covering verified implementation status,
 - Filled triangles and floor-grid lines use a CPU-side Z-buffer for per-pixel visibility
 - Software filled rendering is capped at 360,000 pixels per frame and scaled by SDL, preventing high-DPI windows and resizing from causing unbounded CPU and memory use
 - World-space perspective floor grid that responds to camera movement and is occluded by nearer geometry
-- GitHub Actions builds the Windows executable, runs camera, collision, scene-management, OBJ-loader, PPM image, software-renderer, GPU geometry-rule, GPU frame-recovery, and touch-overlay hit-test unit tests plus a rendering smoke test, and uploads the executable as an artifact
+- GitHub Actions builds the Windows executable, runs all 11 CTest targets (camera, collision, scene management, OBJ loader, PPM image, software renderer, GPU geometry rules, GPU frame recovery, touch-overlay hit testing, backend-switch input, and procedural primitive meshes) plus a rendering smoke test, and uploads the executable as an artifact
 
 > The CPU renderer is an initial CPU-side projection and SDL rasterization prototype, not a modern GPU 3D pipeline. Filled triangles and floor-grid lines use a CPU-side depth buffer; wireframe mode is still drawn as SDL lines without depth testing. Geometry crossing the near plane is clipped instead of being discarded wholesale. To keep frame time and memory bounded when a shape fills the view or the window is high-DPI, filled rendering uses at most 800 x 450 pixels and SDL scales it to the window. The separate experimental GPU backend is described below.
 
@@ -78,11 +78,11 @@ The app includes an initial virtual joystick on the left and a drag-to-look area
 
 ## GPU renderer (experimental)
 
-The app contains a separate `GpuRenderer` implementation using SDL_GPU. It packs the demo OBJ pyramid mesh and procedural rotating cube mesh into shared vertex/index buffers, then draws each visible scene instance with its own mesh range and camera/object transforms. Both pyramid instances and the animated cube are rendered in the same GPU frame. The cube uses a shared transform helper so CPU and GPU backends match its original center (0, 0, 4.2), unit scale, rotation animation, and matching CPU projection scale, uses a depth-stencil attachment, samples the bundled P3 PPM texture, and applies ambient, directional diffuse, and Blinn-Phong specular lighting. It also draws the FPS label and touch-control overlay in a GPU render pass. Texture mipmaps are generated when the device reports the required format support; otherwise the renderer keeps a single-level texture.
+The app contains a separate `GpuRenderer` implementation using SDL_GPU. It packs the demo OBJ pyramid mesh and procedural rotating cube mesh into shared vertex/index buffers, then draws each visible scene instance with its own mesh range and camera/object transforms. Both pyramid instances and the animated cube are rendered in the same GPU frame. The cube uses a shared transform helper so CPU and GPU backends match its original center (0, 0, 4.2), unit scale, rotation animation, and matching CPU projection scale, uses a depth-stencil attachment, samples the bundled P3 PPM texture, and applies ambient, directional diffuse, Blinn-Phong specular, and an emissive cyan point light from the rotating cube. When the device supports the required color and depth formats, the scene uses 4x MSAA and resolves into a sampleable intermediate color target; otherwise it uses a single-sample target. A 9-tap screen-space bloom pass composites the scene to the swapchain, then the FPS label and touch-control overlay are drawn with a single-sample pipeline. This is a lightweight glow approximation, not ray tracing. Texture mipmaps are generated when the device reports the required format support; otherwise the renderer keeps a single-level texture.
 
 Press **G** on a keyboard, or use the on-screen backend switch control on touch devices, to request a CPU/GPU switch. If GPU initialization fails, the app attempts to recreate the CPU renderer. If a GPU frame fails, the app releases the GPU renderer and its window claim, then attempts to recreate the CPU renderer; the app exits only if CPU renderer recreation also fails.
 
-The GPU renderer provides a separate line-fill pipeline for the F3 wireframe toggle; depth testing remains enabled in GPU wireframe mode. The GPU mesh path tracks UV presence separately from UV values, so valid negative or out-of-range OBJ UV coordinates are still sampled using the texture's repeat addressing. A triangle is textured only when all three corners have UV coordinates; mixed-UV triangles use vertex color for the whole primitive to avoid interpolating the UV-presence flag. Before upload, RGBA8 texture dimensions and the exact width × height × 4 byte count are validated against the SDL_GPU transfer-buffer limit. The Metal fragment-stage input now declares the `hasTexCoord` varying passed by the vertex stage; physical-device shader compilation and rendering still require on-device verification. The current GPU path requests MSL shaders and is intended for Metal-capable devices. Windows GPU runtime activation and physical iPhone/iPad Metal rendering have not been verified by the repository's CI. The CPU software renderer remains available as a separate backend. MTL materials, per-material texture selection, PNG/JPEG GPU texture loading, GPU wireframe, and a shared CPU/GPU renderer interface are not implemented. The GPU backend currently shares one P3 PPM texture across its uploaded meshes.
+The GPU renderer provides a separate line-fill pipeline for the F3 wireframe toggle; depth testing remains enabled in GPU wireframe mode. The GPU mesh path tracks UV presence separately from UV values, so valid negative or out-of-range OBJ UV coordinates are still sampled using the texture's repeat addressing. A triangle is textured only when all three corners have UV coordinates; mixed-UV triangles use vertex color for the whole primitive to avoid interpolating the UV-presence flag. Before upload, RGBA8 texture dimensions and the exact width × height × 4 byte count are validated against the SDL_GPU transfer-buffer limit. The Metal fragment-stage input now declares the `hasTexCoord` varying passed by the vertex stage; physical-device shader compilation and rendering still require on-device verification. The current GPU path requests MSL shaders and is intended for Metal-capable devices. Windows GPU runtime activation and physical iPhone/iPad Metal rendering have not been verified by the repository's CI. The CPU software renderer remains available as a separate backend. MTL materials, per-material texture selection, PNG/JPEG GPU texture loading, and a shared CPU/GPU renderer interface are not implemented. The GPU backend currently shares one P3 PPM texture across its uploaded meshes.
 
 The separate `--gpu-smoke-test` command only checks SDL_GPU device/window/swapchain submission; it does not exercise the indexed mesh renderer. It is not part of the current CI workflow.
 
@@ -112,7 +112,7 @@ GitHub Actions can compile the Windows app and run automated tests, but it canno
 include/engine/       Public engine headers
 src/engine/           Engine implementations
 src/main.cpp          Sample application entry point
-tests/                Automated unit and smoke tests, including touch-overlay hit testing
+tests/                11 CTest targets plus the application smoke test, including backend-switch input and procedural primitive-mesh coverage
 .github/workflows/    GitHub Actions workflow
 ```
 
@@ -122,7 +122,7 @@ tests/                Automated unit and smoke tests, including touch-overlay hi
 2. First 3D projection and colored cube
 3. First-person camera and movement
 4. Validate GPU resource lifecycle, failure recovery, and Metal rendering on a physical iPhone
-5. Expand GPU material support, image formats, and wireframe rendering
+5. Expand GPU material support, image formats, and normal mapping
 6. Improve physics, audio, and platform support
 
 
@@ -154,9 +154,9 @@ Gasoline Engine は、C++20 を基盤として開発しているクロスプラ�
 - カメラの移動に応じて見え方が変わり、近いメッシュに隠れる、ワールド座標系の透視投影フロアグリッド
 - ソフトウェア描画は 1 フレームあたり 360,000 ピクセルに制限され、SDL により拡大表示されるため、高 DPI ウィンドウやリサイズで CPU・メモリ使用量が無制限に増加しない
 - 塗りつぶしポリゴンとフロアグリッド線に対応した CPU 側 Z バッファによるピクセル単位の奥行き判定
-- GitHub Actions による Windows 実行ファイルのビルド、カメラ・衝突判定・シーン管理・OBJ ローダー・PPM 画像・ソフトウェアレンダラー・GPU ジオメトリ判定・GPU フレーム復旧・タッチボタンのヒット判定・バックエンド切替時の入力リセットのユニットテスト、描画スモークテスト、および成果物のアップロード
+- GitHub Actions による Windows 実行ファイルのビルド、11件の CTest（カメラ・衝突判定・シーン管理・OBJ ローダー・PPM 画像・ソフトウェアレンダラー・GPU ジオメトリ判定・GPU フレーム復旧・タッチボタンのヒット判定・バックエンド切替入力・プロシージャルメッシュ）、描画スモークテスト、および成果物のアップロード
 
-> CPU 側には透視投影、Z バッファ、透視補正付き UV テクスチャ描画、近接平面クリッピング、ワイヤーフレームに対応したソフトウェアレンダラーがあります。別経路の実験的な SDL_GPU レンダラーもあり、OBJ メッシュ、シーンオブジェクト、深度テスト、P3 PPM テクスチャ、ライティング、タッチオーバーレイを描画します。GPU 経路は MSL を使用し、iPhone 実機での Metal 動作は未確認です。
+> CPU 側には透視投影、Z バッファ、透視補正付き UV テクスチャ描画、近接平面クリッピング、ワイヤーフレームに対応したソフトウェアレンダラーがあります。別経路の実験的な SDL_GPU レンダラーもあり、OBJ メッシュ、シーンオブジェクト、深度テスト、P3 PPM テクスチャ、移動する発光ポイントライト、4x MSAA（対応デバイスのみ）、9タップのスクリーンスペースブルーム、タッチオーバーレイを描画します。このブルームはレイトレーシングではありません。GPU 経路は MSL を使用し、iPhone 実機での Metal 動作は未確認です。
 
 ## カメラ操作
 
@@ -191,7 +191,7 @@ Gasoline Engine は、C++20 を基盤として開発しているクロスプラ�
 
 ## GPU レンダラー（実験段階）
 
-`GpuRenderer` は SDL_GPU を使い、デモ OBJ メッシュを頂点 / インデックスバッファへアップロードして、カメラと各 SceneObject の Transform を反映した描画を行います。深度ステンシル、P3 PPM テクスチャのサンプリング、環境光・方向光・Blinn-Phong スペキュラ、FPS 表示とタッチ操作オーバーレイに対応しています。デバイスが必要な形式をサポートする場合はテクスチャ mipmap を生成し、非対応の場合は単一レベルで動作します。
+`GpuRenderer` は SDL_GPU を使い、デモ OBJ メッシュを頂点 / インデックスバッファへアップロードして、カメラと各 SceneObject の Transform を反映した描画を行います。深度ステンシル、P3 PPM テクスチャのサンプリング、環境光・方向光・Blinn-Phong スペキュラ、回転キューブを光源とする発光ポイントライトに対応しています。対応デバイスでは4x MSAAを使い、シーンをサンプル可能な中間テクスチャへ解決した後、9タップのスクリーンスペースブルームで合成します。非対応の場合はシングルサンプル描画を使います。FPS表示とタッチ操作オーバーレイは合成後に描画します。ブルームは軽量な発光表現であり、レイトレーシングではありません。デバイスが必要な形式をサポートする場合はテクスチャ mipmap を生成し、非対応の場合は単一レベルで動作します。
 
 キーボードの **G** キー、またはタッチ画面上のバックエンド切替操作で CPU / GPU の切替を要求できます。GPU 初期化に失敗した場合は CPU レンダラーの再生成を試みます。GPU のフレーム描画に失敗した場合も GPU リソースとウィンドウの所有権を解放して CPU レンダラーへの復帰を試みます。CPU レンダラーの再生成にも失敗した場合はアプリを終了します。
 

@@ -12,10 +12,12 @@ This document describes the implementation on `ios/initial-support`, not an unim
 - A triangle is textured only if all three corners have UV coordinates. The production path uses the shared `gpu_detail::triangleHasCompleteTexCoords` rule in `include/engine/GpuGeometryRules.hpp`; otherwise all three vertices use the untextured vertex-color path. This keeps the varying constant across the primitive.
 - Per-object constants include model, MVP, inverse-transpose normal matrix, and camera position. OBJ vertex normals are used when valid; missing normals use generated flat face normals.
 - The mesh pass uses depth testing/writes and a depth-stencil texture. The depth texture is recreated when swapchain dimensions change.
-- The GPU fragment shader samples the P3 PPM-derived RGBA texture and applies ambient, directional diffuse, and Blinn-Phong specular lighting.
+- The GPU fragment shader samples the P3 PPM-derived RGBA texture and applies ambient, directional diffuse, Blinn-Phong specular, and distance-attenuated emissive point lighting from the rotating cube.
 - A GPU overlay pass draws touch-control guides, movement knob, FPS text, and CPU backend switch control. It does not use the CPU `SDL_Renderer` while the window is claimed by SDL_GPU.
 - The backend-switch touch hit region is computed from the same shared pixel rectangle constants used by CPU and GPU overlay drawing (`touch_overlay::containsBackendButton`).
 - The texture path requests a full mip chain when the device reports support for the required RGBA8 sampler + color-target usage. Otherwise it retains a single-level texture.
+- The scene uses 4x MSAA only when the swapchain color format and depth format report 4x support. The multisample scene target resolves into a single-sample, sampleable intermediate color texture; devices without 4x support use a single-sample scene target.
+- A full-screen 9-tap screen-space bloom pass composites the intermediate scene texture to the swapchain. The touch/FPS overlay is drawn after that composite with a single-sample pipeline. This is a lightweight glow approximation, not ray tracing or global illumination.
 - Before texture allocation/upload, `RgbaImage::hasValidRgba8Data()` checks nonzero dimensions, exact tightly packed RGBA8 byte count, and the SDL_GPU transfer-buffer size limit.
 
 ## Backend switching and failure behavior
@@ -40,9 +42,11 @@ Keyboard input **G** requests a backend switch. The touch interface also has a t
 - `touch_overlay_hit_test` verifies that normalized touch coordinates are tested against the same backend-switch rectangle drawn by both renderers, including landscape/portrait dimensions and exclusive right/bottom edges.
 - `ppm_image_loader` tests decoded RGBA8 data validation, including incorrect byte counts and dimensions exceeding the supported upload size.
 - GPU frame-failure CPU fallback uses `runGpuFrameWithCpuFallback` from `include/engine/GpuFrameRecovery.hpp`. `gpu_frame_recovery` tests GPU success, successful CPU fallback, fatal CPU fallback, and callback ordering. It does not inject an SDL_GPU failure or verify real SDL window-claim/resource transitions.
+- `backend_switch_input` tests clearing active touch state and suppressing held keyboard movement until release during backend transitions.
+- `primitive_meshes` tests the procedural cube's vertex/triangle structure, UVs, normals, and index bounds.
 - MTL material parsing and per-material texture selection are not implemented.
 - GPU PNG/JPEG/BMP texture loading is not implemented; the GPU texture input currently comes from the P3 PPM loader.
-- GPU wireframe rendering and a shared CPU/GPU renderer interface are not implemented.
+- GPU wireframe rendering is implemented with a separate `SDL_GPU_FILLMODE_LINE` pipeline and retains depth testing. A shared CPU/GPU renderer interface is not implemented.
 - Physical iPhone verification of Metal shader compilation, texture sampling, lighting, touch interaction, and repeated backend switching remains outstanding.
 - Long-running GPU resource lifecycle and leak testing remains outstanding.
 
