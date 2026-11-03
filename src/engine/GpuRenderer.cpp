@@ -362,8 +362,8 @@ fragment float4 bloom_fragment(
                 // Require a genuine front-to-back crossing. A single loose
                 // depth-thickness test caused nearby silhouettes to appear as
                 // stacked reflection layers directly below the source object.
-                if (depthDelta > 0.0008 && previousDepthDelta <= 0.0008 &&
-                    depthDelta < 0.006) {
+                if (hasPreviousSample && depthDelta > 0.0008 &&
+                    previousDepthDelta <= 0.0008 && depthDelta < 0.006) {
                     // Refine the first crossing to reduce coarse-step false hits.
                     float lowDistance = previousRayDistance;
                     float highDistance = distanceAlongRay;
@@ -387,20 +387,23 @@ fragment float4 bloom_fragment(
                         }
                     }
                     hitUV = refinedUV;
+                    hitDistance = distanceAlongRay;
                     hitFound = true;
                     break;
                 }
                 previousDepthDelta = depthDelta;
+                hasPreviousSample = true;
                 previousRayDistance = distanceAlongRay;
             } else {
-                previousDepthDelta = -1.0;
+                previousDepthDelta = projected.z - 1.0;
+                hasPreviousSample = true;
                 previousRayDistance = distanceAlongRay;
             }
         }
 
         if (hitFound) {
             reflectionColor = sceneTexture.sample(sceneSampler, hitUV).rgb;
-            const float distanceFade = 1.0 - clamp(previousRayDistance / 3.0, 0.0, 1.0);
+            const float distanceFade = 1.0 - clamp(hitDistance / 3.0, 0.0, 1.0);
             reflectionWeight = surfaceMask * screenFade *
                 distanceFade * 0.22;
         }
