@@ -64,6 +64,8 @@ private:
     SDL_GPUGraphicsPipeline* shadowPipeline_{nullptr};
     SDL_GPUTexture* shadowColorTexture_{nullptr};
     SDL_GPUTexture* shadowDepthTexture_{nullptr};
+    SDL_GPUTexture* ssaoDepthTexture_{nullptr};
+    SDL_GPUTexture* ssaoDepthAttachmentTexture_{nullptr};
     SDL_GPUTextureFormat shadowColorFormat_{SDL_GPU_TEXTUREFORMAT_INVALID};
     SDL_GPUSampler* shadowSampler_{nullptr};
     static constexpr Uint32 shadowMapSize_ = 1024;
