@@ -309,3 +309,11 @@ The floor uses a darker blue-teal material, while the rotating cube keeps the br
 ### GPU shadow target compatibility
 
 The directional shadow map prefers `R32_FLOAT` when the GPU supports it as a sampleable color target. Devices without that format use `R8G8B8A8_UNORM` and store depth in the red channel, avoiding an unnecessary GPU-backend failure caused only by the single-channel format. If neither format is supported, the existing CPU fallback remains available. Runtime Metal format support and physical-device shadow appearance still require iPhone verification.
+
+
+## GPU screen-space ambient occlusion (SSAO) — 2026-11-03
+
+- Added a single-sample camera-depth prepass using the existing GPU depth pipeline. The pass writes projected camera depth to a sampleable color texture and uses its own depth attachment, independent of the scene's optional 4x MSAA depth target.
+- The final screen-space composite samples that depth texture and evaluates eight neighboring depth samples. Samples that are closer than the current pixel reduce ambient visibility; the result modulates scene color before the existing bloom and ACES-fitted tone mapping.
+- This is a lightweight depth-neighborhood SSAO approximation. It does not reconstruct full view-space positions/normals, use a hemisphere kernel, or implement temporal filtering. The depth pass adds an extra geometry pass and two screen-sized textures.
+- Embedded MSL compilation, Metal texture sampling, visual quality, and iPhone performance still require physical-device verification. CI compilation alone does not validate the shader runtime.
