@@ -332,3 +332,10 @@ The directional shadow map prefers `R32_FLOAT` when the GPU supports it as a sam
 - Tightened the SSR surface mask to favor near-horizontal surfaces, increased the ray-origin normal offset, skipped the near-field region, and reduced reflection strength.
 - Replaced the previous loose single-sample depth-thickness acceptance with a front-to-back depth-delta crossing test and four binary-refinement steps. The ray now requires a valid previous sample before accepting a hit, reducing false intersections around object silhouettes that appeared as stacked reflection layers.
 - This is a source-level correction. The resulting reflection placement and the visible floor gap beneath the cube still require physical iPhone verification.
+
+
+### SSR surface-normal stability correction — 2026-11-03
+
+- Replaced the one-sided depth-neighbor normal estimate with four-neighbor tangent selection. For each screen axis, the shader chooses the shorter valid world-space neighbor segment rather than blindly crossing a foreground/background silhouette.
+- SSR is rejected for pixels whose selected tangent lengths exceed 0.35 world units, preventing depth-discontinuity-derived normals from being treated as reflective floor surfaces.
+- This is a source-level stability guard. It does not remove inherent SSR limitations, and the visible result still requires testing on the target iPhone.
