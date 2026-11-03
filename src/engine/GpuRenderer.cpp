@@ -1147,7 +1147,7 @@ bool GpuRenderer::createDepthTexture(Uint32 width, Uint32 height) {
 }
 
 bool GpuRenderer::renderFrame(
-    const Camera& camera, const std::vector<GpuMeshInstance>& instances,
+    const Camera& camera, const std::vector<SceneRenderItem>& renderItems,
     bool showTouchControls, bool movementActive, float movementX, float movementY,
     float framesPerSecond, bool wireframe) {
     if (device_ == nullptr || window_ == nullptr || pipeline_ == nullptr ||
@@ -1224,17 +1224,17 @@ bool GpuRenderer::renderFrame(
         static_cast<float>(width) / static_cast<float>(height));
     const Matrix4 viewProjection = multiply(projection, view);
     Vec3 pointLightPosition{0.0F, 0.0F, 4.2F};
-    for (const GpuMeshInstance& instance : instances) {
-        if (instance.object != nullptr && instance.meshIndex == 1U) {
+    for (const SceneRenderItem& instance : renderItems) {
+        if (instance.renderOnGpu && instance.object != nullptr && instance.gpuMeshIndex == 1U) {
             pointLightPosition = instance.object->transform.position;
             break;
         }
     }
 
     SDL_BindGPUGraphicsPipeline(pass, wireframe ? wireframePipeline_ : pipeline_);
-    for (const GpuMeshInstance& instance : instances) {
+    for (const SceneRenderItem& instance : renderItems) {
         const SceneObject* object = instance.object;
-        if (object == nullptr || !object->visible || instance.meshIndex >= meshRanges_.size()) {
+        if (!instance.renderOnGpu || object == nullptr || !object->visible || instance.gpuMeshIndex >= meshRanges_.size()) {
             continue;
         }
         const Matrix4 model = modelMatrix(object->transform);
@@ -1246,8 +1246,8 @@ bool GpuRenderer::renderFrame(
         constants.cameraPosition[1] = camera.y();
         constants.cameraPosition[2] = camera.z();
         constants.cameraPosition[3] = 1.0F;
-        constants.materialFlags[0] = instance.meshIndex == 2U ? 1.0F : 0.0F;
-        constants.materialFlags[1] = instance.meshIndex == 1U ? 1.0F : 0.0F;
+        constants.materialFlags[0] = instance.gpuMeshIndex == 2U ? 1.0F : 0.0F;
+        constants.materialFlags[1] = instance.gpuMeshIndex == 1U ? 1.0F : 0.0F;
         constants.pointLightPositionRange[0] = pointLightPosition.x;
         constants.pointLightPositionRange[1] = pointLightPosition.y;
         constants.pointLightPositionRange[2] = pointLightPosition.z;
@@ -1258,7 +1258,7 @@ bool GpuRenderer::renderFrame(
         constants.pointLightColorIntensity[3] = 3.2F;
         SDL_PushGPUVertexUniformData(commandBuffer, 0, &constants,
                                      static_cast<Uint32>(sizeof(constants)));
-        const MeshRange& range = meshRanges_[instance.meshIndex];
+        const MeshRange& range = meshRanges_[instance.gpuMeshIndex];
         SDL_DrawGPUIndexedPrimitives(pass, range.indexCount, 1, range.firstIndex, 0, 0);
     }
 
