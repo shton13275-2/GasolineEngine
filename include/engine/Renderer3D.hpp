@@ -7,17 +7,12 @@
 #include <vector>
 
 #include "engine/Scene.hpp"
+#include "engine/SceneRenderItem.hpp"
 
 namespace originalengine {
 
 class Camera;
 struct Mesh;
-
-struct MeshInstance {
-    const Mesh* mesh{nullptr};
-    const SceneObject* object{nullptr};
-    std::string texturePath{};
-};
 
 struct TextureImage {
     int width{0};
@@ -36,7 +31,7 @@ public:
 
     [[nodiscard]] bool render(int width, int height, double elapsedSeconds,
                               const Camera& camera,
-                              const std::vector<MeshInstance>& meshInstances = {},
+                              const std::vector<SceneRenderItem>& renderItems = {},
                               bool wireframe = false);
 
     [[nodiscard]] static SDL_Point softwareRenderSize(int width, int height) noexcept;
