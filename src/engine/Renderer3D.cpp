@@ -479,7 +479,7 @@ SDL_Point Renderer3D::softwareRenderSize(int width, int height) noexcept {
 
 bool Renderer3D::render(int width, int height, double elapsedSeconds,
                         const Camera& camera,
-                        const std::vector<MeshInstance>& meshInstances, bool wireframe) {
+                        const std::vector<SceneRenderItem>& renderItems, bool wireframe) {
     if (width <= 0 || height <= 0) {
         return false;
     }
@@ -675,8 +675,8 @@ bool Renderer3D::render(int width, int height, double elapsedSeconds,
     }
 
     // Draw every visible scene object that has a valid mesh and transform.
-    for (const MeshInstance& instance : meshInstances) {
-        if (instance.mesh == nullptr || instance.object == nullptr ||
+    for (const SceneRenderItem& instance : renderItems) {
+        if (!instance.renderOnCpu || instance.mesh == nullptr || instance.object == nullptr ||
             !instance.object->visible || instance.mesh->empty()) {
             continue;
         }
