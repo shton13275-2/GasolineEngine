@@ -35,12 +35,14 @@ struct ObjectConstants {
     float pointLightPositionRange[4]{};
     float pointLightColorIntensity[4]{};
     Matrix4 shadowMvp{};
+    float depthFlags[4]{};
 };
 
 struct CompositeConstants {
     Matrix4 inverseViewProjection{};
     Matrix4 viewProjection{};
     float cameraPosition[4]{};
+    float depthFlags[4]{};
 };
 
 constexpr char vertexSource[] = R"metal(
@@ -70,6 +72,7 @@ struct VertexOutput {
     float materialMetallic;
     float materialRoughness;
     float4 lightSpacePosition;
+    float shadowDepthPacked;
 };
 
 struct CameraConstants {
@@ -81,6 +84,7 @@ struct CameraConstants {
     float4 pointLightPositionRange;
     float4 pointLightColorIntensity;
     float4x4 shadowMvp;
+    float4 depthFlags;
 };
 
 vertex VertexOutput main_vertex(
@@ -103,6 +107,7 @@ vertex VertexOutput main_vertex(
     output.materialMetallic = camera.materialFlags.z;
     output.materialRoughness = camera.materialFlags.w;
     output.lightSpacePosition = camera.shadowMvp * worldPosition;
+    output.shadowDepthPacked = camera.depthFlags.x;
     return output;
 }
 )metal";
@@ -126,6 +131,7 @@ struct VertexOutput {
     float materialMetallic;
     float materialRoughness;
     float4 lightSpacePosition;
+    float shadowDepthPacked;
 };
 
 struct CameraConstants {
@@ -189,7 +195,11 @@ fragment float4 main_fragment(
             const float2 texel = 1.0 / float2(shadowMap.get_width(), shadowMap.get_height());
             float occlusion = 0.0;
             for (int y=-1; y<=1; ++y) for (int x=-1; x<=1; ++x) {
-                const float stored = shadowMap.sample(shadowSampler, uv + float2(float(x),float(y))*texel).r;
+                const float4 storedSample = shadowMap.sample(
+                    shadowSampler, uv + float2(float(x),float(y))*texel);
+                const float stored = input.shadowDepthPacked > 0.5
+                    ? dot(storedSample, float4(1.0, 1.0 / 255.0, 1.0 / 65025.0, 0.0))
+                    : storedSample.r;
                 occlusion += ndc.z - 0.0025 > stored ? 1.0 : 0.0;
             }
             shadowVisibility = 1.0 - (occlusion / 9.0) * 0.72;
@@ -253,13 +263,30 @@ constexpr char shadowVertexSource[] = R"metal(
 #include <metal_stdlib>
 using namespace metal;
 struct ShadowInput { float3 position [[attribute(0)]]; };
-struct ShadowConstants { float4x4 mvp; float4x4 model; };
-vertex float4 shadow_vertex(ShadowInput in [[stage_in]], constant ShadowConstants& c [[buffer(0)]]) { return c.mvp * float4(in.position,1.0); }
+struct ShadowOutput { float4 position [[position]]; float depthPacked; };
+struct ShadowConstants { float4x4 mvp; float4x4 model; float4 depthFlags; };
+vertex ShadowOutput shadow_vertex(ShadowInput in [[stage_in]], constant ShadowConstants& c [[buffer(0)]]) {
+    ShadowOutput output;
+    output.position = c.mvp * float4(in.position, 1.0);
+    output.depthPacked = c.depthFlags.x;
+    return output;
+}
 )metal";
 constexpr char shadowFragmentSource[] = R"metal(
 #include <metal_stdlib>
 using namespace metal;
-fragment float4 shadow_fragment(float4 position [[position]]) { return float4(position.z, 0.0, 0.0, 1.0); }
+struct ShadowOutput { float4 position [[position]]; float depthPacked; };
+float4 packDepth24(float depth) {
+    const float safeDepth = clamp(depth, 0.0, 1.0 - 1.0 / 16581375.0);
+    float3 encoded = fract(safeDepth * float3(1.0, 255.0, 65025.0));
+    encoded -= encoded.yzz * float3(1.0 / 255.0, 1.0 / 255.0, 0.0);
+    return float4(encoded, 1.0);
+}
+fragment float4 shadow_fragment(ShadowOutput input [[stage_in]]) {
+    return input.depthPacked > 0.5
+        ? packDepth24(input.position.z)
+        : float4(input.position.z, 0.0, 0.0, 1.0);
+}
 )metal";
 
 constexpr char bloomVertexSource[] = R"metal(
@@ -293,6 +320,7 @@ struct CompositeConstants {
     float4x4 inverseViewProjection;
     float4x4 viewProjection;
     float4 cameraPosition;
+    float4 depthFlags;
 };
 
 float3 reconstructWorldPosition(float2 uv, float depth, constant CompositeConstants& c)
@@ -312,7 +340,10 @@ fragment float4 bloom_fragment(
 {
     const float2 texel = 1.0 / float2(sceneTexture.get_width(), sceneTexture.get_height());
     const float2 uv = input.uv;
-    const float centerDepth = depthTexture.sample(depthSampler, uv).r;
+    const float4 centerDepthSample = depthTexture.sample(depthSampler, uv);
+    const float centerDepth = constants.depthFlags.x > 0.5
+        ? dot(centerDepthSample, float4(1.0, 1.0 / 255.0, 1.0 / 65025.0, 0.0))
+        : centerDepthSample.r;
     float3 base = sceneTexture.sample(sceneSampler, uv).rgb;
     float3 reflectionColor = float3(0.0);
     float reflectionWeight = 0.0;
@@ -358,7 +389,10 @@ fragment float4 bloom_fragment(
             if (any(sampleUV <= float2(0.003)) || any(sampleUV >= float2(0.997)) ||
                 projected.z <= 0.0 || projected.z >= 1.0) break;
 
-            const float sceneDepth = depthTexture.sample(depthSampler, sampleUV).r;
+            const float4 sceneDepthSample = depthTexture.sample(depthSampler, sampleUV);
+            const float sceneDepth = constants.depthFlags.x > 0.5
+                ? dot(sceneDepthSample, float4(1.0, 1.0 / 255.0, 1.0 / 65025.0, 0.0))
+                : sceneDepthSample.r;
             if (sceneDepth < 0.999) {
                 const float depthDelta = projected.z - sceneDepth;
                 // Require a genuine front-to-back crossing. A single loose
@@ -379,7 +413,10 @@ fragment float4 bloom_fragment(
                         const float2 middleUV = float2(
                             middleProjected.x * 0.5 + 0.5, 0.5 - middleProjected.y * 0.5);
                         if (any(middleUV <= float2(0.003)) || any(middleUV >= float2(0.997))) break;
-                        const float middleSceneDepth = depthTexture.sample(depthSampler, middleUV).r;
+                        const float4 middleDepthSample = depthTexture.sample(depthSampler, middleUV);
+                        const float middleSceneDepth = constants.depthFlags.x > 0.5
+                            ? dot(middleDepthSample, float4(1.0, 1.0 / 255.0, 1.0 / 65025.0, 0.0))
+                            : middleDepthSample.r;
                         if (middleSceneDepth < 0.999 &&
                             middleProjected.z > middleSceneDepth + 0.0008) {
                             highDistance = middleDistance;
@@ -423,8 +460,11 @@ fragment float4 bloom_fragment(
     float occlusion = 0.0;
     if (centerDepth < 0.999) {
         for (uint index = 0; index < 8; ++index) {
-            const float neighborDepth = depthTexture.sample(
-                depthSampler, uv + aoOffsets[index] * texel).r;
+            const float4 neighborDepthSample = depthTexture.sample(
+                depthSampler, uv + aoOffsets[index] * texel);
+            const float neighborDepth = constants.depthFlags.x > 0.5
+                ? dot(neighborDepthSample, float4(1.0, 1.0 / 255.0, 1.0 / 65025.0, 0.0))
+                : neighborDepthSample.r;
             occlusion += smoothstep(0.0015, 0.012, centerDepth - neighborDepth);
         }
     }
@@ -1354,6 +1394,7 @@ bool GpuRenderer::createShadowMap() {
         if (SDL_GPUTextureSupportsFormat(
                 device_, format, SDL_GPU_TEXTURETYPE_2D, usage)) {
             shadowColorFormat_ = format;
+            shadowDepthPacked_ = format == SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
             break;
         }
     }
@@ -1609,8 +1650,9 @@ bool GpuRenderer::renderFrame(
         if (!item.renderOnGpu || object == nullptr || !object->visible ||
             item.gpuMeshIndex >= meshRanges_.size()) continue;
         const Matrix4 model = modelMatrix(object->transform);
-        struct DepthConstants { Matrix4 mvp; Matrix4 model; } constants{};
+        struct DepthConstants { Matrix4 mvp; Matrix4 model; float depthFlags[4]; } constants{};
         constants.model = model;
+        constants.depthFlags[0] = shadowDepthPacked_ ? 1.0F : 0.0F;
         constants.mvp = multiply(viewProjection, model);
         SDL_PushGPUVertexUniformData(commandBuffer, 0, &constants,
             static_cast<Uint32>(sizeof(constants)));
@@ -1648,8 +1690,9 @@ bool GpuRenderer::renderFrame(
             if (!item.renderOnGpu || object == nullptr || !object->visible ||
                 item.gpuMeshIndex >= meshRanges_.size()) continue;
             const Matrix4 model = modelMatrix(object->transform);
-            struct ShadowConstants { Matrix4 mvp; Matrix4 model; } constants{};
+            struct ShadowConstants { Matrix4 mvp; Matrix4 model; float depthFlags[4]; } constants{};
             constants.model = model;
+            constants.depthFlags[0] = shadowDepthPacked_ ? 1.0F : 0.0F;
             constants.mvp = multiply(lightVP, model);
             SDL_PushGPUVertexUniformData(commandBuffer, 0, &constants,
                 static_cast<Uint32>(sizeof(constants)));
@@ -1726,6 +1769,7 @@ bool GpuRenderer::renderFrame(
         constants.pointLightColorIntensity[2] = 1.0F;
         constants.pointLightColorIntensity[3] = 3.2F;
         constants.shadowMvp = multiply(lightVP, model);
+        constants.depthFlags[0] = shadowDepthPacked_ ? 1.0F : 0.0F;
         SDL_PushGPUVertexUniformData(commandBuffer, 0, &constants,
                                      static_cast<Uint32>(sizeof(constants)));
         const MeshRange& range = meshRanges_[instance.gpuMeshIndex];
@@ -1758,6 +1802,7 @@ bool GpuRenderer::renderFrame(
     compositeConstants.cameraPosition[1] = camera.y();
     compositeConstants.cameraPosition[2] = camera.z();
     compositeConstants.cameraPosition[3] = 1.0F;
+    compositeConstants.depthFlags[0] = shadowDepthPacked_ ? 1.0F : 0.0F;
     SDL_PushGPUFragmentUniformData(commandBuffer, 0, &compositeConstants,
         static_cast<Uint32>(sizeof(compositeConstants)));
     SDL_DrawGPUPrimitives(compositePass, 3, 1, 0, 0);
@@ -1973,6 +2018,7 @@ void GpuRenderer::shutdown() noexcept {
     sceneColorFormat_ = SDL_GPU_TEXTUREFORMAT_INVALID;
     sampleCount_ = SDL_GPU_SAMPLECOUNT_1;
     shadowMappingEnabled_ = false;
+    shadowDepthPacked_ = false;
     shadowColorFormat_ = SDL_GPU_TEXTUREFORMAT_INVALID;
     meshRanges_.clear();
 }
