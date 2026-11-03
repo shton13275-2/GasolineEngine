@@ -1317,6 +1317,49 @@ bool GpuRenderer::renderFrame(
         return false;
     }
 
+    const SDL_GPUBufferBinding vertexBinding{vertexBuffer_, 0};
+    const SDL_GPUBufferBinding indexBinding{indexBuffer_, 0};
+    const SDL_GPUTextureSamplerBinding colorBinding{colorTexture_, colorSampler_};
+    const Matrix4 lightVP = shadowViewProjection();
+    if (shadowMappingEnabled_) {
+        SDL_GPUColorTargetInfo shadowColorTarget{};
+        shadowColorTarget.texture = shadowColorTexture_;
+        shadowColorTarget.clear_color = SDL_FColor{1.0F, 1.0F, 1.0F, 1.0F};
+        shadowColorTarget.load_op = SDL_GPU_LOADOP_CLEAR;
+        shadowColorTarget.store_op = SDL_GPU_STOREOP_STORE;
+        SDL_GPUDepthStencilTargetInfo shadowDepthTarget{};
+        shadowDepthTarget.texture = shadowDepthTexture_;
+        shadowDepthTarget.clear_depth = 1.0F;
+        shadowDepthTarget.load_op = SDL_GPU_LOADOP_CLEAR;
+        shadowDepthTarget.store_op = SDL_GPU_STOREOP_DONT_CARE;
+        shadowDepthTarget.stencil_load_op = SDL_GPU_LOADOP_DONT_CARE;
+        shadowDepthTarget.stencil_store_op = SDL_GPU_STOREOP_DONT_CARE;
+        SDL_GPURenderPass* shadowPass = SDL_BeginGPURenderPass(
+            commandBuffer, &shadowColorTarget, 1, &shadowDepthTarget);
+        if (shadowPass == nullptr) {
+            setError("SDL_BeginGPURenderPass(shadow)");
+            (void)SDL_SubmitGPUCommandBuffer(commandBuffer);
+            return false;
+        }
+        SDL_BindGPUGraphicsPipeline(shadowPass, shadowPipeline_);
+        SDL_BindGPUVertexBuffers(shadowPass, 0, &vertexBinding, 1);
+        SDL_BindGPUIndexBuffer(shadowPass, &indexBinding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
+        for (const SceneRenderItem& item : renderItems) {
+            const SceneObject* object = item.object;
+            if (!item.renderOnGpu || object == nullptr || !object->visible ||
+                item.gpuMeshIndex >= meshRanges_.size()) continue;
+            const Matrix4 model = modelMatrix(object->transform);
+            struct ShadowConstants { Matrix4 mvp; Matrix4 model; } constants{};
+            constants.model = model;
+            constants.mvp = multiply(lightVP, model);
+            SDL_PushGPUVertexUniformData(commandBuffer, 0, &constants,
+                static_cast<Uint32>(sizeof(constants)));
+            const MeshRange& range = meshRanges_[item.gpuMeshIndex];
+            SDL_DrawGPUIndexedPrimitives(shadowPass, range.indexCount, 1, range.firstIndex, 0, 0);
+        }
+        SDL_EndGPURenderPass(shadowPass);
+    }
+
     SDL_GPUColorTargetInfo colorTarget{};
     colorTarget.texture = sampleCount_ == SDL_GPU_SAMPLECOUNT_1
         ? sceneColorTexture_ : multisampleColorTexture_;
@@ -1326,7 +1369,6 @@ bool GpuRenderer::renderFrame(
         ? SDL_GPU_STOREOP_STORE : SDL_GPU_STOREOP_RESOLVE;
     colorTarget.resolve_texture = sampleCount_ == SDL_GPU_SAMPLECOUNT_1
         ? nullptr : sceneColorTexture_;
-
     SDL_GPUDepthStencilTargetInfo depthTarget{};
     depthTarget.texture = depthTexture_;
     depthTarget.clear_depth = 1.0F;
@@ -1334,55 +1376,19 @@ bool GpuRenderer::renderFrame(
     depthTarget.store_op = SDL_GPU_STOREOP_DONT_CARE;
     depthTarget.stencil_load_op = SDL_GPU_LOADOP_DONT_CARE;
     depthTarget.stencil_store_op = SDL_GPU_STOREOP_DONT_CARE;
-
-    SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(
-        commandBuffer, &colorTarget, 1, &depthTarget);
+    SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(commandBuffer, &colorTarget, 1, &depthTarget);
     if (pass == nullptr) {
-        setError("SDL_BeginGPURenderPass");
+        setError("SDL_BeginGPURenderPass(scene)");
         (void)SDL_SubmitGPUCommandBuffer(commandBuffer);
         return false;
     }
-
-    SDL_BindGPUGraphicsPipeline(pass, wireframe ? wireframePipeline_ : pipeline_);
-    const SDL_GPUBufferBinding vertexBinding{vertexBuffer_, 0};
-    SDL_BindGPUVertexBuffers(pass, 0, &vertexBinding, 1);
-    const SDL_GPUBufferBinding indexBinding{indexBuffer_, 0};
-    SDL_BindGPUIndexBuffer(pass, &indexBinding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
-    const SDL_GPUTextureSamplerBinding colorBinding{colorTexture_, colorSampler_};
-    SDL_BindGPUFragmentSamplers(pass, 0, &colorBinding, 1);
-    SDL_EndGPURenderPass(pass);
-    const Matrix4 lightVP=shadowViewProjection();
-    if(shadowMappingEnabled_){
-        SDL_GPUColorTargetInfo sc{};sc.texture=shadowColorTexture_;sc.clear_color=SDL_FColor{1,1,1,1};
-        sc.load_op=SDL_GPU_LOADOP_CLEAR;sc.store_op=SDL_GPU_STOREOP_STORE;
-        SDL_GPUDepthStencilTargetInfo sd{};sd.texture=shadowDepthTexture_;sd.clear_depth=1.0F;
-        sd.load_op=SDL_GPU_LOADOP_CLEAR;sd.store_op=SDL_GPU_STOREOP_DONT_CARE;
-        sd.stencil_load_op=SDL_GPU_LOADOP_DONT_CARE;sd.stencil_store_op=SDL_GPU_STOREOP_DONT_CARE;
-        SDL_GPURenderPass* sp=SDL_BeginGPURenderPass(commandBuffer,&sc,1,&sd);
-        if(!sp){setError("SDL_BeginGPURenderPass(shadow)");(void)SDL_SubmitGPUCommandBuffer(commandBuffer);return false;}
-        SDL_BindGPUGraphicsPipeline(sp,shadowPipeline_);SDL_BindGPUVertexBuffers(sp,0,&vertexBinding,1);
-        SDL_BindGPUIndexBuffer(sp,&indexBinding,SDL_GPU_INDEXELEMENTSIZE_32BIT);
-        for(const SceneRenderItem& item:renderItems){const SceneObject* o=item.object;
-            if(!item.renderOnGpu||!o||!o->visible||item.gpuMeshIndex>=meshRanges_.size())continue;
-            const Matrix4 model=modelMatrix(o->transform);
-            struct ShadowConstants{Matrix4 mvp;Matrix4 model;} c{};c.model=model;c.mvp=multiply(lightVP,model);
-            SDL_PushGPUVertexUniformData(commandBuffer,0,&c,static_cast<Uint32>(sizeof(c)));
-            const MeshRange& range=meshRanges_[item.gpuMeshIndex];
-            SDL_DrawGPUIndexedPrimitives(sp,range.indexCount,1,range.firstIndex,0,0);
-        }
-        SDL_EndGPURenderPass(sp);
-    }
-    colorTarget.load_op = SDL_GPU_LOADOP_LOAD;
-    depthTarget.load_op = SDL_GPU_LOADOP_LOAD;
-    pass = SDL_BeginGPURenderPass(commandBuffer, &colorTarget, 1, &depthTarget);
-    if (!pass) { setError("SDL_BeginGPURenderPass(scene after shadow)"); (void)SDL_SubmitGPUCommandBuffer(commandBuffer); return false; }
     SDL_BindGPUGraphicsPipeline(pass, wireframe ? wireframePipeline_ : pipeline_);
     SDL_BindGPUVertexBuffers(pass, 0, &vertexBinding, 1);
     SDL_BindGPUIndexBuffer(pass, &indexBinding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
     SDL_BindGPUFragmentSamplers(pass, 0, &colorBinding, 1);
     if (shadowMappingEnabled_) {
-        const SDL_GPUTextureSamplerBinding sb{shadowColorTexture_, shadowSampler_};
-        SDL_BindGPUFragmentSamplers(pass, 1, &sb, 1);
+        const SDL_GPUTextureSamplerBinding shadowBinding{shadowColorTexture_, shadowSampler_};
+        SDL_BindGPUFragmentSamplers(pass, 1, &shadowBinding, 1);
     }
 
     const Matrix4 view = viewMatrix(camera);
