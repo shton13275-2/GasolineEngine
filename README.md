@@ -273,3 +273,10 @@ The floor uses a darker blue-teal material, while the rotating cube keeps the br
 - Expanded the screen-space bloom composite from a compact 9-tap cross to a 13-tap kernel with diagonal and wider-radius samples, a slightly lower highlight threshold, and a stronger glow contribution. The effect remains a single-pass screen-space approximation; it does not add an HDR target or a multi-pass Gaussian blur.
 - Added a soft analytic shadow approximation to the GPU floor shader. It projects an elliptical shadow from the rotating cube onto the horizontal floor opposite the directional light, with a smooth edge and partial opacity. This is not a shadow map and does not cast shadows onto arbitrary meshes.
 - The changes are source-level only until the matching GitHub Actions run completes and the resulting IPA is checked on a physical iPhone. CI does not compile the embedded MSL at runtime or verify the visual result.
+
+
+### GPU bloom and emissive material correction
+
+- Reduced the GPU screen-space bloom from the wide 13-tap kernel to a restrained 9-tap cross, raised the highlight threshold from 0.55–1.0 to 0.82–1.20, and reduced the composite gain from 1.55 to 0.55.
+- Added a separate per-object emissive flag. Only the rotating cube mesh (mesh range 1, also used as the point-light position source) receives the strong cyan emission. Pyramid meshes no longer receive the generic non-floor emission; they use ambient, directional and attenuated point-light shading instead.
+- The change is source-level. The current iOS/Windows CI does not compile the embedded MSL at runtime or verify the visual appearance on a physical iPhone.
