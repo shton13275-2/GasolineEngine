@@ -34,6 +34,7 @@ struct ObjectConstants {
     float materialFlags[4]{};
     float pointLightPositionRange[4]{};
     float pointLightColorIntensity[4]{};
+    Matrix4 shadowMvp{};
 };
 
 constexpr char vertexSource[] = R"metal(
@@ -62,6 +63,7 @@ struct VertexOutput {
     float isEmissive;
     float materialMetallic;
     float materialRoughness;
+    float4 lightSpacePosition;
 };
 
 struct CameraConstants {
@@ -72,6 +74,7 @@ struct CameraConstants {
     float4 materialFlags;
     float4 pointLightPositionRange;
     float4 pointLightColorIntensity;
+    float4x4 shadowMvp;
 };
 
 vertex VertexOutput main_vertex(
@@ -93,6 +96,7 @@ vertex VertexOutput main_vertex(
     output.isEmissive = camera.materialFlags.y;
     output.materialMetallic = camera.materialFlags.z;
     output.materialRoughness = camera.materialFlags.w;
+    output.lightSpacePosition = camera.shadowMvp * worldPosition;
     return output;
 }
 )metal";
@@ -130,7 +134,9 @@ struct CameraConstants {
 fragment float4 main_fragment(
     VertexOutput input [[stage_in]],
     texture2d<float> baseColorTexture [[texture(0)]],
-    sampler baseColorSampler [[sampler(0)]])
+    sampler baseColorSampler [[sampler(0)]],
+    texture2d<float> shadowMap [[texture(1)]],
+    sampler shadowSampler [[sampler(1)]])
 {
     const float3 sampledColor = input.hasTexCoord < 0.5
         ? input.color
@@ -168,8 +174,21 @@ fragment float4 main_fragment(
     const float3 diffuseWeight = (1.0 - fresnel) * (1.0 - metallic);
     const float3 directionalBrdf =
         diffuseWeight * albedo / 3.14159265 + specular;
-    const float3 directionalContribution =
-        directionalBrdf * nDotL * float3(1.15, 1.15, 1.15);
+    float shadowVisibility = 1.0;
+    if (input.lightSpacePosition.w > 0.0001) {
+        const float3 ndc = input.lightSpacePosition.xyz / input.lightSpacePosition.w;
+        const float2 uv = float2(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5);
+        if (all(uv >= float2(0.0)) && all(uv <= float2(1.0)) && ndc.z >= 0.0 && ndc.z <= 1.0) {
+            const float2 texel = 1.0 / float2(shadowMap.get_width(), shadowMap.get_height());
+            float occlusion = 0.0;
+            for (int y=-1; y<=1; ++y) for (int x=-1; x<=1; ++x) {
+                const float stored = shadowMap.sample(shadowSampler, uv + float2(float(x),float(y))*texel).r;
+                occlusion += ndc.z - 0.0025 > stored ? 1.0 : 0.0;
+            }
+            shadowVisibility = 1.0 - (occlusion / 9.0) * 0.72;
+        }
+    }
+    const float3 directionalContribution = directionalBrdf * nDotL * float3(1.15,1.15,1.15) * shadowVisibility;
 
     const float3 toPointLight = input.pointLightPositionRange.xyz - input.worldPosition;
     const float lightDistance = length(toPointLight);
@@ -208,22 +227,7 @@ fragment float4 main_fragment(
     const float3 ambient = albedo * ambientStrength * (1.0 - metallic);
     const float3 lighting = ambient + directionalContribution + pointContribution + emission;
 
-    // Approximate the cube's soft directional shadow on the horizontal floor.
-    // The shadow is projected opposite the directional light and fades at its edge.
-    float shadowVisibility = 1.0;
-    if (floorSurface) {
-        const float shadowHeight = max(
-            input.pointLightPositionRange.y - input.worldPosition.y, 0.0);
-        const float2 shadowCenter = input.pointLightPositionRange.xz -
-            directionalLight.xz * (shadowHeight / max(directionalLight.y, 0.1));
-        const float2 shadowCoordinates =
-            (input.worldPosition.xz - shadowCenter) / float2(1.1, 1.45);
-        const float shadowDistanceSquared = dot(shadowCoordinates, shadowCoordinates);
-        const float shadowOpacity =
-            (1.0 - smoothstep(0.12, 1.0, shadowDistanceSquared)) * 0.48;
-        shadowVisibility = 1.0 - shadowOpacity;
-    }
-    return float4(lighting * shadowVisibility, 1.0);
+    return float4(ambient + directionalContribution + pointContribution + emission, 1.0);
 }
 )metal";
 
@@ -237,6 +241,19 @@ struct OverlayConstants {
     Uint32 padding;
 };
 
+
+constexpr char shadowVertexSource[] = R"metal(
+#include <metal_stdlib>
+using namespace metal;
+struct ShadowInput { float3 position [[attribute(0)]]; };
+struct ShadowConstants { float4x4 mvp; float4x4 model; };
+vertex float4 shadow_vertex(ShadowInput in [[stage_in]], constant ShadowConstants& c [[buffer(0)]]) { return c.mvp * float4(in.position,1.0); }
+)metal";
+constexpr char shadowFragmentSource[] = R"metal(
+#include <metal_stdlib>
+using namespace metal;
+fragment float shadow_fragment(float4 position [[position]]) { return position.z; }
+)metal";
 
 constexpr char bloomVertexSource[] = R"metal(
 #include <metal_stdlib>
@@ -485,6 +502,18 @@ Matrix4 normalMatrix(const Transform& transform) {
     result[6] = c21 * inverseDeterminant;
     result[10] = c22 * inverseDeterminant;
     return result;
+}
+
+Matrix4 shadowViewProjection() {
+    const Vec3 eye{4.5F,8.0F,5.0F}, target{0.0F,0.0F,0.0F};
+    const auto norm=[](Vec3 v){const float n=std::sqrt(v.x*v.x+v.y*v.y+v.z*v.z);return n>1e-5F?Vec3{v.x/n,v.y/n,v.z/n}:Vec3{};};
+    const auto dot=[](Vec3 a,Vec3 b){return a.x*b.x+a.y*b.y+a.z*b.z;};
+    const Vec3 f=norm({target.x-eye.x,target.y-eye.y,target.z-eye.z}),r=norm({f.z,0.0F,-f.x});
+    const Vec3 u=norm({f.y*r.z-f.z*r.y,f.z*r.x-f.x*r.z,f.x*r.y-f.y*r.x});
+    Matrix4 v=identityMatrix();v[0]=r.x;v[4]=r.y;v[8]=r.z;v[1]=u.x;v[5]=u.y;v[9]=u.z;
+    v[2]=f.x;v[6]=f.y;v[10]=f.z;v[12]=-dot(r,eye);v[13]=-dot(u,eye);v[14]=-dot(f,eye);
+    constexpr float e=8.0F,n=0.1F,z=30.0F;Matrix4 p=identityMatrix();
+    p[0]=1.0F/e;p[5]=1.0F/e;p[10]=1.0F/(z-n);p[14]=-n/(z-n);return multiply(p,v);
 }
 
 Matrix4 viewMatrix(const Camera& camera) {
@@ -929,7 +958,7 @@ bool GpuRenderer::initialize(SDL_Window* window, const std::vector<const Mesh*>&
     fragmentInfo.entrypoint = "main_fragment";
     fragmentInfo.format = SDL_GPU_SHADERFORMAT_MSL;
     fragmentInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
-    fragmentInfo.num_samplers = 1;
+    fragmentInfo.num_samplers = 2;
     SDL_GPUShader* fragmentShader = SDL_CreateGPUShader(device_, &fragmentInfo);
     if (fragmentShader == nullptr) {
         setError("SDL_CreateGPUShader(fragment)");
@@ -985,6 +1014,31 @@ bool GpuRenderer::initialize(SDL_Window* window, const std::vector<const Mesh*>&
         setError("SDL_CreateGPUGraphicsPipeline");
         shutdown();
         return false;
+    }
+
+    if (!createShadowMap()) { shutdown(); return false; }
+    if (shadowMappingEnabled_) {
+        SDL_GPUShaderCreateInfo sv{}; sv.code_size=std::strlen(shadowVertexSource);
+        sv.code=reinterpret_cast<const Uint8*>(shadowVertexSource); sv.entrypoint="shadow_vertex";
+        sv.format=SDL_GPU_SHADERFORMAT_MSL; sv.stage=SDL_GPU_SHADERSTAGE_VERTEX; sv.num_uniform_buffers=1;
+        SDL_GPUShader* vs=SDL_CreateGPUShader(device_,&sv);
+        SDL_GPUShaderCreateInfo sf{}; sf.code_size=std::strlen(shadowFragmentSource);
+        sf.code=reinterpret_cast<const Uint8*>(shadowFragmentSource); sf.entrypoint="shadow_fragment";
+        sf.format=SDL_GPU_SHADERFORMAT_MSL; sf.stage=SDL_GPU_SHADERSTAGE_FRAGMENT;
+        SDL_GPUShader* fs=vs?SDL_CreateGPUShader(device_,&sf):nullptr;
+        if(!vs||!fs){if(vs)SDL_ReleaseGPUShader(device_,vs);if(fs)SDL_ReleaseGPUShader(device_,fs);setError("SDL_CreateGPUShader(shadow)");shutdown();return false;}
+        SDL_GPUColorTargetDescription ct{};ct.format=SDL_GPU_TEXTUREFORMAT_R32_FLOAT;
+        SDL_GPUGraphicsPipelineCreateInfo pi{};pi.vertex_shader=vs;pi.fragment_shader=fs;
+        pi.vertex_input_state.vertex_buffer_descriptions=&vertexBufferDescription;pi.vertex_input_state.num_vertex_buffers=1;
+        pi.vertex_input_state.vertex_attributes=attributes;pi.vertex_input_state.num_vertex_attributes=5;
+        pi.primitive_type=SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;pi.rasterizer_state.fill_mode=SDL_GPU_FILLMODE_FILL;
+        pi.rasterizer_state.cull_mode=SDL_GPU_CULLMODE_NONE;pi.rasterizer_state.front_face=SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
+        pi.multisample_state.sample_count=SDL_GPU_SAMPLECOUNT_1;pi.depth_stencil_state.enable_depth_test=true;
+        pi.depth_stencil_state.enable_depth_write=true;pi.depth_stencil_state.compare_op=SDL_GPU_COMPAREOP_LESS_OR_EQUAL;
+        pi.target_info.color_target_descriptions=&ct;pi.target_info.num_color_targets=1;
+        pi.target_info.has_depth_stencil_target=true;pi.target_info.depth_stencil_format=depthFormat_;
+        shadowPipeline_=SDL_CreateGPUGraphicsPipeline(device_,&pi);SDL_ReleaseGPUShader(device_,fs);SDL_ReleaseGPUShader(device_,vs);
+        if(!shadowPipeline_){setError("SDL_CreateGPUGraphicsPipeline(shadow)");shutdown();return false;}
     }
 
     SDL_GPUShaderCreateInfo overlayVertexInfo{};
@@ -1110,6 +1164,26 @@ bool GpuRenderer::initialize(SDL_Window* window, const std::vector<const Mesh*>&
         return false;
     }
     return true;
+}
+
+bool GpuRenderer::createShadowMap() {
+    const SDL_GPUTextureUsageFlags usage=SDL_GPU_TEXTUREUSAGE_COLOR_TARGET|SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    if(!SDL_GPUTextureSupportsFormat(device_,SDL_GPU_TEXTUREFORMAT_R32_FLOAT,SDL_GPU_TEXTURETYPE_2D,usage)){
+        shadowMappingEnabled_=false;return true;
+    }
+    SDL_GPUTextureCreateInfo ci{};ci.type=SDL_GPU_TEXTURETYPE_2D;ci.format=SDL_GPU_TEXTUREFORMAT_R32_FLOAT;
+    ci.usage=usage;ci.width=shadowMapSize_;ci.height=shadowMapSize_;ci.layer_count_or_depth=1;
+    ci.num_levels=1;ci.sample_count=SDL_GPU_SAMPLECOUNT_1;shadowColorTexture_=SDL_CreateGPUTexture(device_,&ci);
+    SDL_GPUTextureCreateInfo di{};di.type=SDL_GPU_TEXTURETYPE_2D;di.format=depthFormat_;
+    di.usage=SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET;di.width=shadowMapSize_;di.height=shadowMapSize_;
+    di.layer_count_or_depth=1;di.num_levels=1;di.sample_count=SDL_GPU_SAMPLECOUNT_1;
+    shadowDepthTexture_=SDL_CreateGPUTexture(device_,&di);
+    if(!shadowColorTexture_||!shadowDepthTexture_){setError("SDL_CreateGPUTexture(shadow)");return false;}
+    SDL_GPUSamplerCreateInfo si{};si.min_filter=SDL_GPU_FILTER_NEAREST;si.mag_filter=SDL_GPU_FILTER_NEAREST;
+    si.mipmap_mode=SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;si.address_mode_u=SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    si.address_mode_v=SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;si.address_mode_w=SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    shadowSampler_=SDL_CreateGPUSampler(device_,&si);if(!shadowSampler_){setError("SDL_CreateGPUSampler(shadow)");return false;}
+    shadowMappingEnabled_=true;return true;
 }
 
 bool GpuRenderer::createDepthTexture(Uint32 width, Uint32 height) {
@@ -1275,6 +1349,29 @@ bool GpuRenderer::renderFrame(
     SDL_BindGPUIndexBuffer(pass, &indexBinding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
     const SDL_GPUTextureSamplerBinding colorBinding{colorTexture_, colorSampler_};
     SDL_BindGPUFragmentSamplers(pass, 0, &colorBinding, 1);
+    const Matrix4 lightVP=shadowViewProjection();
+    if(shadowMappingEnabled_){
+        SDL_GPUColorTargetInfo sc{};sc.texture=shadowColorTexture_;sc.clear_color=SDL_FColor{1,1,1,1};
+        sc.load_op=SDL_GPU_LOADOP_CLEAR;sc.store_op=SDL_GPU_STOREOP_STORE;
+        SDL_GPUDepthStencilTargetInfo sd{};sd.texture=shadowDepthTexture_;sd.clear_depth=1.0F;
+        sd.load_op=SDL_GPU_LOADOP_CLEAR;sd.store_op=SDL_GPU_STOREOP_DONT_CARE;
+        sd.stencil_load_op=SDL_GPU_LOADOP_DONT_CARE;sd.stencil_store_op=SDL_GPU_STOREOP_DONT_CARE;
+        SDL_GPURenderPass* sp=SDL_BeginGPURenderPass(commandBuffer,&sc,1,&sd);
+        if(!sp){setError("SDL_BeginGPURenderPass(shadow)");(void)SDL_SubmitGPUCommandBuffer(commandBuffer);return false;}
+        SDL_BindGPUGraphicsPipeline(sp,shadowPipeline_);SDL_BindGPUVertexBuffers(sp,0,&vertexBinding,1);
+        SDL_BindGPUIndexBuffer(sp,&indexBinding,SDL_GPU_INDEXELEMENTSIZE_32BIT);
+        for(const SceneRenderItem& item:renderItems){const SceneObject* o=item.object;
+            if(!item.renderOnGpu||!o||!o->visible||item.gpuMeshIndex>=meshRanges_.size())continue;
+            const Matrix4 model=modelMatrix(o->transform);
+            struct ShadowConstants{Matrix4 mvp;Matrix4 model;} c{};c.model=model;c.mvp=multiply(lightVP,model);
+            SDL_PushGPUVertexUniformData(commandBuffer,0,&c,static_cast<Uint32>(sizeof(c)));
+            const MeshRange& range=meshRanges_[item.gpuMeshIndex];
+            SDL_DrawGPUIndexedPrimitives(sp,range.indexCount,1,range.firstIndex,0,0);
+        }
+        SDL_EndGPURenderPass(sp);
+        const SDL_GPUTextureSamplerBinding sb{shadowColorTexture_,shadowSampler_};
+        SDL_BindGPUFragmentSamplers(pass,1,&sb,1);
+    }
 
     const Matrix4 view = viewMatrix(camera);
     const Matrix4 projection = projectionMatrix(
@@ -1315,6 +1412,7 @@ bool GpuRenderer::renderFrame(
         constants.pointLightColorIntensity[1] = 0.72F;
         constants.pointLightColorIntensity[2] = 1.0F;
         constants.pointLightColorIntensity[3] = 3.2F;
+        constants.shadowMvp = multiply(lightVP, model);
         SDL_PushGPUVertexUniformData(commandBuffer, 0, &constants,
                                      static_cast<Uint32>(sizeof(constants)));
         const MeshRange& range = meshRanges_[instance.gpuMeshIndex];
@@ -1484,6 +1582,10 @@ void GpuRenderer::drawOverlay(
 
 void GpuRenderer::shutdown() noexcept {
     if (device_ != nullptr) {
+        if(shadowSampler_){SDL_ReleaseGPUSampler(device_,shadowSampler_);shadowSampler_=nullptr;}
+        if(shadowColorTexture_){SDL_ReleaseGPUTexture(device_,shadowColorTexture_);shadowColorTexture_=nullptr;}
+        if(shadowDepthTexture_){SDL_ReleaseGPUTexture(device_,shadowDepthTexture_);shadowDepthTexture_=nullptr;}
+        if(shadowPipeline_){SDL_ReleaseGPUGraphicsPipeline(device_,shadowPipeline_);shadowPipeline_=nullptr;}
         if (sceneColorTexture_ != nullptr) {
             SDL_ReleaseGPUTexture(device_, sceneColorTexture_);
             sceneColorTexture_ = nullptr;
@@ -1544,6 +1646,7 @@ void GpuRenderer::shutdown() noexcept {
     depthFormat_ = SDL_GPU_TEXTUREFORMAT_INVALID;
     sceneColorFormat_ = SDL_GPU_TEXTUREFORMAT_INVALID;
     sampleCount_ = SDL_GPU_SAMPLECOUNT_1;
+    shadowMappingEnabled_ = false;
     meshRanges_.clear();
 }
 
