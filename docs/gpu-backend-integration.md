@@ -126,3 +126,15 @@ The iOS shader compile job found that the embedded `overlayVertexSource` concate
 The application creates `ssr.log` beside `startup.log` in the directory returned by `SDL_GetPrefPath("com.gasolineengine", "GasolineEngine")`. This uses the same platform-specific writable preference directory on iOS and desktop; it does not write into the read-only iOS app bundle. The file is recreated at launch. SSR toggle changes are recorded immediately, and while the GPU renderer is active a compact frame-state record is appended at most once per second with SSR enabled state, pixel dimensions, smoothed FPS, camera position, and GPU driver. GPU frame errors are recorded as well.
 
 This first diagnostic version records CPU-visible renderer state only. It does **not** report per-pixel depth validity, ray-march iterations, ray hits/misses, or reflection weights because those values are calculated inside the GPU fragment shader and are not currently read back to the CPU. Do not interpret these log fields as GPU hit statistics. Reading shader counters back would require a separate GPU instrumentation/readback implementation.
+
+
+## SSR per-pixel GPU diagnostics — 2026-11-04
+
+- The fullscreen composite now writes two color attachments: the regular swapchain image and a same-resolution R8G8B8A8_UNORM diagnostics target.
+- The diagnostics fragment output encodes valid camera-depth samples in R, floor receiver mask in G, ray-march steps divided by 64 in B, and accepted ray hits in A.
+- At most once per second, the app records a texture download into an SDL GPU download transfer buffer. It submits the command buffer with a GPU fence and maps the transfer buffer only on a later frame after SDL_QueryGPUFence reports completion.
+- The CPU aggregates total pixels, valid-depth pixels, reflective receiver pixels, pixels that performed ray marching, reconstructed ray-step totals/average, and accepted hit pixels. These aggregate values are appended to ssr.log.
+- The overlay pipeline declares the same two render-pass attachments and masks writes to the diagnostics attachment.
+- This adds an extra full-resolution RGBA8 render target and periodic GPU-to-CPU transfer. It is asynchronous and not performed every frame, but its memory/bandwidth cost and Metal runtime compatibility still need physical-device verification. The 8-bit normalized step channel is quantized; these are classification counters derived from the per-pixel image, not GPU atomic counters.
+- If diagnostics texture creation/readback fails, the renderer records the diagnostic error where possible; the current texture-allocation path reports initialization/frame failure rather than silently pretending counters exist.
+- CI MSL compilation and IPA packaging do not establish the correctness of the readback or the SSR image on an iPhone.
