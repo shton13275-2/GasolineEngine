@@ -105,8 +105,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 scripts/extract_msl_shaders.py \\
-            --source src/engine/GpuRenderer.cpp \\
+          python3 scripts/extract_msl_shaders.py \
+            --source src/engine/GpuRenderer.cpp \
             --output build-ios/embedded-metal
 
           mkdir -p build-ios/embedded-metal/air
@@ -125,8 +125,8 @@ jobs:
             air_files+=("$air_file")
           done
 
-          xcrun -sdk iphoneos metal \\
-            -o build-ios/embedded-metal/GasolineEngine.metallib \\
+          xcrun -sdk iphoneos metal \
+            -o build-ios/embedded-metal/GasolineEngine.metallib \
             "${air_files[@]}"
           test -s build-ios/embedded-metal/GasolineEngine.metallib
 
