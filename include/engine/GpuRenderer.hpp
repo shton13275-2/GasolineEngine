@@ -3,6 +3,7 @@
 #include <SDL3/SDL.h>
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -13,6 +14,17 @@
 #include "engine/SceneRenderItem.hpp"
 
 namespace originalengine {
+
+struct SsrGpuDiagnostics {
+    std::uint64_t sampleSerial{0};
+    std::uint64_t totalPixels{0};
+    std::uint64_t depthValidPixels{0};
+    std::uint64_t reflectivePixels{0};
+    std::uint64_t rayMarchPixels{0};
+    std::uint64_t rayMarchSteps{0};
+    std::uint64_t rayHitPixels{0};
+    float averageRayMarchSteps{0.0F};
+};
 
 // SDL_GPU renderer for indexed triangle meshes and the shared scene camera.
 // Mesh data is uploaded once during initialization; per-object MVP uniforms are
@@ -36,11 +48,15 @@ public:
 
     [[nodiscard]] const std::string& lastError() const noexcept { return lastError_; }
     [[nodiscard]] const std::string& driverName() const noexcept { return driverName_; }
+    [[nodiscard]] const SsrGpuDiagnostics& ssrGpuDiagnostics() const noexcept {
+        return ssrGpuDiagnostics_;
+    }
 
 private:
     void setError(const char* operation);
     [[nodiscard]] bool createDepthTexture(Uint32 width, Uint32 height);
     [[nodiscard]] bool createShadowMap();
+    void processSsrDiagnosticsReadback();
     void drawOverlayRect(SDL_GPUCommandBuffer* commandBuffer, SDL_GPURenderPass* pass,
                          float x, float y, float width, float height,
                          Uint32 viewportWidth, Uint32 viewportHeight,
@@ -68,6 +84,14 @@ private:
     SDL_GPUTexture* shadowDepthTexture_{nullptr};
     SDL_GPUTexture* ssaoDepthTexture_{nullptr};
     SDL_GPUTexture* ssaoDepthAttachmentTexture_{nullptr};
+    SDL_GPUTexture* ssrDiagnosticsTexture_{nullptr};
+    SDL_GPUTransferBuffer* ssrDiagnosticsTransferBuffer_{nullptr};
+    SDL_GPUFence* ssrDiagnosticsFence_{nullptr};
+    Uint32 ssrDiagnosticsWidth_{0};
+    Uint32 ssrDiagnosticsHeight_{0};
+    Uint64 lastSsrDiagnosticsReadbackTicks_{0};
+    SsrGpuDiagnostics ssrGpuDiagnostics_{};
+    std::string ssrDiagnosticsError_;
     SDL_GPUTextureFormat shadowColorFormat_{SDL_GPU_TEXTUREFORMAT_INVALID};
     bool shadowDepthPacked_{false};
     SDL_GPUSampler* shadowSampler_{nullptr};
