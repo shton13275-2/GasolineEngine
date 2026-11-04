@@ -146,3 +146,11 @@ This first diagnostic version records CPU-visible renderer state only. It does *
 - Across the submitted SSR-on samples, ray_march_pixels exactly matched depth_valid_pixels. Source inspection found why: the shader reconstructed every valid depth pixel and ran the ray loop even when the pixel's floor receiver mask was zero. The final reflection weight hid non-floor contributions, but those unnecessary traces polluted hit counters and wasted GPU work.
 - Updated the shader to enter the ray-march path only when surfaceMask > 0.001. The aggregate ray-march and hit counters now describe floor receiver candidates rather than all visible geometry.
 - This correction removes unnecessary traces and makes the diagnostics semantically useful. It is not a confirmed fix for the repeated/combed reflection artifact. A new IPA and fresh iPhone log/image are still required; the previous log was generated before this correction.
+
+## SSR debug views — 2026-11-04
+
+- The GPU fullscreen composite accepts a debug-view index in CompositeConstants.depthFlags.z. Mode 0 is the normal composite; modes 1–4 show raw camera depth, the reconstructed floor receiver mask, the ray-hit/receiver mask, and the sampled hit UV respectively.
+- In GPU mode, a DBG button to the left of SSR cycles through the five modes. Desktop keyboard V performs the same cycle. The normal SSR enable/disable control remains separate.
+- The ray-march block is now gated by surfaceMask > 0.001, so non-floor geometry no longer performs SSR traces or contributes to the hit diagnostics.
+- The debug modes are temporary diagnostic output paths, not a final renderer feature. Compare the raw-depth and receiver-mask views first; then inspect hit mask and hit UV if those are spatially coherent. The debug modes that depend on the receiver reconstruction should be tested with SSR enabled.
+- The new touch hit region and MSL runtime behavior still require CI and physical iPhone verification.
