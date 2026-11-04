@@ -28,6 +28,11 @@ int main() {
     const float ssrLeft = (landscapeWidth - ssrButtonRight - ssrButtonWidth) / landscapeWidth;
     const float ssrRight = (landscapeWidth - ssrButtonRight) / landscapeWidth;
     const float ssrCenterX = (ssrLeft + ssrRight) * 0.5F;
+    const float debugLeft = (landscapeWidth - ssrDebugButtonRight - ssrDebugButtonWidth) / landscapeWidth;
+    const float debugRight = (landscapeWidth - ssrDebugButtonRight) / landscapeWidth;
+    const float debugCenterX = (debugLeft + debugRight) * 0.5F;
+    allPassed &= expect(containsSsrDebugButton(debugCenterX, centerY, landscapeWidth, landscapeHeight), "SSR debug button center must be clickable.");
+    allPassed &= expect(!containsSsrDebugButton(debugRight, centerY, landscapeWidth, landscapeHeight), "SSR debug button right edge must be exclusive.");
     allPassed &= expect(
         containsSsrButton(ssrCenterX, centerY, landscapeWidth, landscapeHeight),
         "The visible SSR button center must be clickable.");
