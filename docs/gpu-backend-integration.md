@@ -115,3 +115,8 @@ The iOS job extracts the eight raw MSL strings embedded in `src/engine/GpuRender
 - In GPU mode, the overlay presents an `SSR` button immediately left of the CPU backend switch. A tap toggles the flag; the button uses the normal blue color when enabled and a muted color when disabled. The main loop also maps keyboard **T** to the same toggle.
 - `touch_overlay_hit_test` covers the SSR button center, exclusive right edge, separation from the backend button, and portrait layout.
 - Use the toggle to compare the exact same camera/scene with SSR on and off. If the repeated floor pattern disappears only when SSR is off, that isolates the artifact to the SSR contribution; it does not by itself identify the faulty SSR sub-operation. This comparison still requires a new IPA and physical iPhone test.
+
+
+## Overlay Metal shader compile correction
+
+The iOS shader compile job found that the embedded `overlayVertexSource` concatenated `#include <metal_stdlib>` and `using namespace metal;` on one line. The source now separates them with a newline, restoring the Metal namespace directive required for unqualified math functions such as `cos`, `sin`, and `max`. Confirm the fix with a new iOS Actions run; do not treat the source edit alone as a successful Metal compile.
