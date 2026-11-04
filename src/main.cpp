@@ -57,7 +57,7 @@ void initializeDiagnosticLog() {
         std::ofstream ssrLog(ssrDiagnosticLogPath, std::ios::trunc);
         if (ssrLog) {
             ssrLog << "Gasoline Engine SSR diagnostics\n";
-            ssrLog << "Note: CPU-side render state only; GPU ray hit/miss counters are not collected.\n";
+            ssrLog << "GPU per-pixel SSR diagnostics are asynchronously read back about once per second.\n";
         }
     }
 }
@@ -360,6 +360,7 @@ int main(int argc, char* argv[]) {
         originalengine::BackendSwitchInputState backendSwitchInput;
         Uint64 previousTicks = SDL_GetTicks();
         Uint64 lastSsrDiagnosticTicks = previousTicks;
+        Uint64 lastSsrGpuDiagnosticsSerial = 0;
         double elapsedSeconds = 0.0;
         float smoothedFps = 0.0F;
 
@@ -591,6 +592,19 @@ int main(int argc, char* argv[]) {
                             gpuFailure = gpuRenderer->lastError();
                             writeSsrDiagnostic(std::string("frame_error=") + gpuFailure);
                         } else {
+                            const auto& gpuStats = gpuRenderer->ssrGpuDiagnostics();
+                            if (gpuStats.sampleSerial != lastSsrGpuDiagnosticsSerial) {
+                                lastSsrGpuDiagnosticsSerial = gpuStats.sampleSerial;
+                                writeSsrDiagnostic(
+                                    "gpu sample=" + std::to_string(gpuStats.sampleSerial) +
+                                    " pixels=" + std::to_string(gpuStats.totalPixels) +
+                                    " depth_valid_pixels=" + std::to_string(gpuStats.depthValidPixels) +
+                                    " reflective_pixels=" + std::to_string(gpuStats.reflectivePixels) +
+                                    " ray_march_pixels=" + std::to_string(gpuStats.rayMarchPixels) +
+                                    " ray_march_steps=" + std::to_string(gpuStats.rayMarchSteps) +
+                                    " avg_ray_steps=" + std::to_string(gpuStats.averageRayMarchSteps) +
+                                    " ray_hit_pixels=" + std::to_string(gpuStats.rayHitPixels));
+                            }
                             const Uint64 diagnosticTicks = SDL_GetTicks();
                             if (diagnosticTicks - lastSsrDiagnosticTicks >= 1000U) {
                                 lastSsrDiagnosticTicks = diagnosticTicks;
