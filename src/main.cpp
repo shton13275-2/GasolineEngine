@@ -353,6 +353,7 @@ int main(int argc, char* argv[]) {
         bool mouseCaptured = false;
         bool wireframe = false;
         bool ssrEnabled = true;
+        Uint32 ssrDebugView = 0;
         bool animationPaused = false;
         bool fullscreen = false;
         SDL_FingerID movementFinger = 0;
@@ -375,7 +376,13 @@ int main(int argc, char* argv[]) {
                     (event.type == SDL_EVENT_FINGER_DOWN || event.type == SDL_EVENT_FINGER_MOTION ||
                      event.type == SDL_EVENT_FINGER_UP)) {
                     if (event.type == SDL_EVENT_FINGER_DOWN) {
-                        if (gpuMode && originalengine::touch_overlay::containsSsrButton(
+                        if (gpuMode && originalengine::touch_overlay::containsSsrDebugButton(
+                                event.tfinger.x, event.tfinger.y,
+                                static_cast<float>(touchWidth),
+                                static_cast<float>(touchHeight))) {
+                            ssrDebugView = (ssrDebugView + 1U) % 5U;
+                            writeSsrDiagnostic("debug_view=" + std::to_string(ssrDebugView));
+                        } else if (gpuMode && originalengine::touch_overlay::containsSsrButton(
                                 event.tfinger.x, event.tfinger.y,
                                 static_cast<float>(touchWidth),
                                 static_cast<float>(touchHeight))) {
@@ -428,6 +435,10 @@ int main(int argc, char* argv[]) {
                 } else if (!smokeTest && event.type == SDL_EVENT_KEY_DOWN &&
                            !event.key.repeat && event.key.key == SDLK_EQUALS) {
                     camera.adjustMouseSensitivity(0.0005F);
+                } else if (!smokeTest && event.type == SDL_EVENT_KEY_DOWN &&
+                           !event.key.repeat && event.key.key == SDLK_V) {
+                    ssrDebugView = (ssrDebugView + 1U) % 5U;
+                    writeSsrDiagnostic("debug_view=" + std::to_string(ssrDebugView));
                 } else if (!smokeTest && event.type == SDL_EVENT_KEY_DOWN &&
                            !event.key.repeat && event.key.key == SDLK_T) {
                     ssrEnabled = !ssrEnabled;
@@ -587,7 +598,7 @@ int main(int argc, char* argv[]) {
                         const bool rendered = gpuRenderer->renderFrame(
                             camera, renderItems, !smokeTest, backendSwitchInput.hasMovementFinger,
                             backendSwitchInput.movementX, backendSwitchInput.movementY, smoothedFps,
-                            wireframe, ssrEnabled);
+                            wireframe, ssrEnabled, ssrDebugView);
                         if (!rendered) {
                             gpuFailure = gpuRenderer->lastError();
                             writeSsrDiagnostic(std::string("frame_error=") + gpuFailure);
