@@ -837,3 +837,10 @@ GPU shadow target format fallback — 2026-11-03
 
 - The iOS Metal source compilation check exposed a malformed directive in the embedded `overlayVertexSource`: `#include <metal_stdlib>using namespace metal;` had no newline between the include and namespace directive. This prevented Metal's standard math functions (`cos`, `sin`, `max`) from resolving in that shader.
 - Restored the newline so the extracted source contains separate include and `using namespace metal;` lines. This is a source-level correction; the follow-up Actions run must confirm Metal compilation.
+
+## SSR diagnostic log — 2026-11-04
+
+- Added an `ssr.log` file beside `startup.log` using the same SDL `SDL_GetPrefPath("com.gasolineengine", "GasolineEngine")` directory, including on iOS. This is a writable app preference directory, not the bundled app resources directory.
+- The file is truncated/recreated at launch. SSR ON/OFF transitions are logged immediately. While GPU rendering succeeds, at most one state record per second is written with SSR state, pixel resolution, smoothed FPS, camera coordinates, and GPU driver. GPU frame errors are recorded.
+- This is a first-stage CPU-side diagnostic log. It does not contain shader-internal depth-valid-pixel counts, ray-march counts, hit/miss counts, or reflection weights. Those values require GPU-side counters and an explicit readback path, which are not part of this change.
+- iOS IPA build and physical iPhone file access still need verification. The exact visible location can be retrieved from the app's SDL preference directory; it is not a folder inside the installed app bundle.
