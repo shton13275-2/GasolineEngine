@@ -369,6 +369,10 @@ fragment BloomFragmentOutput bloom_fragment(
         const float floorDistance = abs(worldPosition.y + 1.5);
         const float surfaceMask = 1.0 - smoothstep(0.025, 0.09, floorDistance);
         diagnosticReceiverMask = surfaceMask;
+        // Only reflective floor pixels need an SSR trace. The previous code
+        // marched every visible depth pixel, including cube/pyramid surfaces,
+        // even though their final reflection weight was zero.
+        if (surfaceMask > 0.001) {
         const float3 normal = float3(0.0, 1.0, 0.0);
         const float3 viewDirection = normalize(constants.cameraPosition.xyz - worldPosition);
         const float3 incident = -viewDirection;
@@ -456,6 +460,7 @@ fragment BloomFragmentOutput bloom_fragment(
             const float distanceFade = 1.0 - clamp(hitDistance / 3.0, 0.0, 1.0);
             reflectionWeight = surfaceMask * screenFade *
                 distanceFade * 0.22;
+        }
         }
     }
 
