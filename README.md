@@ -21,7 +21,7 @@ For a complete, source-oriented handoff covering verified implementation status,
 - Near-plane clipping for cube faces and loaded mesh triangles, preserving the visible portion of geometry that crosses the camera's near plane
 - Animated perspective-projected 3D cube with six face colors and all three rotation axes
 - Renders multiple visible scene objects from shared OBJ mesh data, applying each object's position, rotation, scale, and visibility flag
-- Experimental SDL_GPU backend renders indexed OBJ meshes with depth testing, P3 PPM texture sampling, metallic-roughness Cook-Torrance PBR, a directional shadow map, depth-neighborhood SSAO, experimental floor-only screen-space reflections with asynchronous per-pixel GPU diagnostic readback (valid-depth, floor receiver, floor-only ray-step and hit-pixel counts), capability-gated HDR/ACES tone mapping, optional 4x MSAA, screen-space bloom, mipmap fallback, and a GPU touch/FPS overlay; physical-device Metal behavior and the current SSR image remain unverified
+- Experimental SDL_GPU backend renders indexed OBJ meshes with depth testing, P3 PPM texture sampling, metallic-roughness Cook-Torrance PBR, a directional shadow map, depth-neighborhood SSAO, experimental floor-only screen-space reflections with asynchronous per-pixel GPU diagnostics and touch-selectable debug views (depth, floor receiver mask, hit mask, hit UV), capability-gated HDR/ACES tone mapping, optional 4x MSAA, screen-space bloom, mipmap fallback, and a GPU touch/FPS overlay; physical-device Metal behavior and the current SSR image remain unverified
 - Press 1 or 2 to toggle the visibility of each demo pyramid at runtime
 - Press F3 to toggle wireframe rendering for the cube and loaded OBJ meshes in both CPU and GPU modes
 - Press F11 to toggle between windowed and fullscreen display
@@ -50,7 +50,7 @@ For a complete, source-oriented handoff covering verified implementation status,
 - **Right mouse button:** capture/release the mouse for looking around
 - **Mouse movement:** look around while captured
 - **iPhone/iPad touch:** drag on the left half to move; drag on the right half to look around. Both can be used simultaneously.
-- The on-screen CPU/GPU switch responds only inside its visible button rectangle.
+- The on-screen CPU/GPU switch responds only inside its visible button rectangle. In GPU mode, tap DBG (left of SSR) or press V on desktop to cycle SSR debug views: normal, raw depth, floor receiver mask, ray-hit mask, and hit UV.
 - Switching render backends cancels active touch movement/look input and ignores held keyboard movement keys until they are released.
 - **Esc:** release the mouse; press again to exit
 
