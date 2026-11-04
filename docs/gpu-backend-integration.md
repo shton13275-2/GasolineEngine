@@ -120,3 +120,9 @@ The iOS job extracts the eight raw MSL strings embedded in `src/engine/GpuRender
 ## Overlay Metal shader compile correction
 
 The iOS shader compile job found that the embedded `overlayVertexSource` concatenated `#include <metal_stdlib>` and `using namespace metal;` on one line. The source now separates them with a newline, restoring the Metal namespace directive required for unqualified math functions such as `cos`, `sin`, and `max`. Confirm the fix with a new iOS Actions run; do not treat the source edit alone as a successful Metal compile.
+
+## SSR diagnostic log
+
+The application creates `ssr.log` beside `startup.log` in the directory returned by `SDL_GetPrefPath("com.gasolineengine", "GasolineEngine")`. This uses the same platform-specific writable preference directory on iOS and desktop; it does not write into the read-only iOS app bundle. The file is recreated at launch. SSR toggle changes are recorded immediately, and while the GPU renderer is active a compact frame-state record is appended at most once per second with SSR enabled state, pixel dimensions, smoothed FPS, camera position, and GPU driver. GPU frame errors are recorded as well.
+
+This first diagnostic version records CPU-visible renderer state only. It does **not** report per-pixel depth validity, ray-march iterations, ray hits/misses, or reflection weights because those values are calculated inside the GPU fragment shader and are not currently read back to the CPU. Do not interpret these log fields as GPU hit statistics. Reading shader counters back would require a separate GPU instrumentation/readback implementation.
