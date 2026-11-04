@@ -25,6 +25,19 @@ int main() {
     const float centerX = (left + right) * 0.5F;
     const float centerY = (top + bottom) * 0.5F;
 
+    const float ssrLeft = (landscapeWidth - ssrButtonRight - ssrButtonWidth) / landscapeWidth;
+    const float ssrRight = (landscapeWidth - ssrButtonRight) / landscapeWidth;
+    const float ssrCenterX = (ssrLeft + ssrRight) * 0.5F;
+    allPassed &= expect(
+        containsSsrButton(ssrCenterX, centerY, landscapeWidth, landscapeHeight),
+        "The visible SSR button center must be clickable.");
+    allPassed &= expect(
+        !containsSsrButton(ssrRight, centerY, landscapeWidth, landscapeHeight),
+        "The SSR button right edge must be exclusive.");
+    allPassed &= expect(
+        !containsSsrButton(centerX, centerY, landscapeWidth, landscapeHeight),
+        "The SSR button must not overlap the backend switch button.");
+
     allPassed &= expect(
         containsBackendButton(centerX, centerY, landscapeWidth, landscapeHeight),
         "The visible backend button center must be clickable.");
@@ -60,6 +73,13 @@ int main() {
     allPassed &= expect(
         !containsBackendButton(0.5F, 0.5F, 0.0F, portraitHeight),
         "A zero-width viewport must not produce a hit.");
+    allPassed &= expect(
+        containsSsrButton((portraitWidth - ssrButtonRight - ssrButtonWidth * 0.5F) / portraitWidth,
+                          portraitCenterY, portraitWidth, portraitHeight),
+        "The SSR button center must remain clickable in portrait layout.");
+    allPassed &= expect(
+        !containsSsrButton(0.5F, 0.5F, portraitWidth, 0.0F),
+        "A zero-height viewport must not produce an SSR hit.");
     allPassed &= expect(
         !containsBackendButton(0.5F, 0.5F, portraitWidth, 0.0F),
         "A zero-height viewport must not produce a hit.");
