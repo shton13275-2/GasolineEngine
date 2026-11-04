@@ -497,8 +497,8 @@ fragment float4 bloom_fragment(
 )metal";
 
 constexpr char overlayVertexSource[] = R"metal(
-#include <metal_stdlib>using namespace metal;
-
+#include <metal_stdlib>
+using namespace metal;
 struct OverlayConstants {
     float2 center;
     float2 radius;
@@ -997,8 +997,7 @@ bool GpuRenderer::initialize(SDL_Window* window, const std::vector<const Mesh*>&
         return false;
     }
     const SDL_GPUTextureFormat swapchainFormat = SDL_GetGPUSwapchainTextureFormat(device_, window_);
-    sceneColorFormat_ = SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT;
-    const SDL_GPUTextureUsageFlags hdrUsage =
+    sceneColorFormat_ = SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT;    const SDL_GPUTextureUsageFlags hdrUsage =
         SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
     if (!SDL_GPUTextureSupportsFormat(device_, sceneColorFormat_,
             SDL_GPU_TEXTURETYPE_2D, hdrUsage)) {
@@ -1497,8 +1496,7 @@ bool GpuRenderer::createDepthTexture(Uint32 width, Uint32 height) {
     sceneColorInfo.layer_count_or_depth = 1;
     sceneColorInfo.num_levels = 1;    sceneColorInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
     if (!SDL_GPUTextureSupportsFormat(device_, sceneColorInfo.format,
-            SDL_GPU_TEXTURETYPE_2D, sceneColorInfo.usage)) {
-        SDL_ReleaseGPUTexture(device_, depthTexture_);
+            SDL_GPU_TEXTURETYPE_2D, sceneColorInfo.usage)) {        SDL_ReleaseGPUTexture(device_, depthTexture_);
         depthTexture_ = nullptr;
         depthWidth_ = 0;
         depthHeight_ = 0;
@@ -1997,8 +1995,7 @@ void GpuRenderer::shutdown() noexcept {
             SDL_ReleaseGPUGraphicsPipeline(device_, overlayPipeline_);
             overlayPipeline_ = nullptr;
         }
-        if (wireframePipeline_ != nullptr) {
-            SDL_ReleaseGPUGraphicsPipeline(device_, wireframePipeline_);
+        if (wireframePipeline_ != nullptr) {            SDL_ReleaseGPUGraphicsPipeline(device_, wireframePipeline_);
             wireframePipeline_ = nullptr;
         }
         if (pipeline_ != nullptr) {
