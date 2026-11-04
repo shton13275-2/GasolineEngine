@@ -823,3 +823,11 @@ GPU shadow target format fallback — 2026-11-03
 - This check is intended to catch MSL syntax/type/compiler errors that the C++ compiler cannot see. It does not verify SDL_GPU pipeline creation, device-specific texture-format support, shader binding compatibility at runtime, or visual rendering on a physical iPhone.
 - Updated the current implementation summary to reflect Cook-Torrance PBR, directional shadow mapping, depth-neighborhood SSAO, experimental floor-only SSR, HDR/ACES compositing, and 24-bit packed depth fallback. The physical screenshot from the earlier IPA still showed repeated/combed SSR artifacts; the latest packed-depth change has not yet been verified on-device.
 - CMakeLists.txt currently registers 12 CTest targets, including `scene_render_items`; README and handoff counts now match the actual registrations.
+
+
+### GPU SSR manual toggle — 2026-11-04
+
+- Added a runtime SSR enable flag to the GPU composite. When disabled, the fullscreen composite skips only the SSR world-position reconstruction and reflection ray-march; the camera-depth prepass, SSAO, bloom, ACES tone mapping, scene lighting, and shadow mapping remain active.
+- On iOS/GPU mode, a dedicated `SSR` button is drawn to the left of the existing `CPU` backend-switch button. Its blue state indicates SSR enabled; its muted state indicates SSR disabled. The hit region is defined in `include/engine/TouchOverlay.hpp` and covered by `touch_overlay_hit_test`.
+- Keyboard **T** toggles SSR on desktop. The toggle state is held by `src/main.cpp` and passed to `GpuRenderer::renderFrame`; it resets to enabled on application startup.
+- This is a diagnostic isolation control, not a fix for the reflection artifact. Compare the same scene with SSR enabled and disabled on the physical iPhone. No visual result is claimed until that test is performed.
