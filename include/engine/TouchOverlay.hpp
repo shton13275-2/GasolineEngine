@@ -24,12 +24,26 @@ inline constexpr float backendButtonRight = 18.0F;
 inline constexpr float backendButtonY = 18.0F;
 inline constexpr float backendButtonWidth = 98.0F;
 inline constexpr float backendButtonHeight = 42.0F;
+inline constexpr float ssrButtonRight = backendButtonRight + backendButtonWidth + 8.0F;
+inline constexpr float ssrButtonWidth = 72.0F;
 inline constexpr float fontPixelSize = 2.0F;
 inline constexpr float fontAdvance = 12.0F;
 inline constexpr float fontHeight = 10.0F;
 
 // Tests normalized SDL finger coordinates against the visible backend-switch
 // rectangle. The right and bottom edges are exclusive, matching pixel bounds.
+inline constexpr bool containsSsrButton(
+    float normalizedX, float normalizedY,
+    float viewportWidth, float viewportHeight) noexcept {
+    if (viewportWidth <= 0.0F || viewportHeight <= 0.0F) return false;
+    const float left = (viewportWidth - ssrButtonRight - ssrButtonWidth) / viewportWidth;
+    const float right = (viewportWidth - ssrButtonRight) / viewportWidth;
+    const float top = backendButtonY / viewportHeight;
+    const float bottom = (backendButtonY + backendButtonHeight) / viewportHeight;
+    return normalizedX >= left && normalizedX < right &&
+           normalizedY >= top && normalizedY < bottom;
+}
+
 inline constexpr bool containsBackendButton(
     float normalizedX, float normalizedY,
     float viewportWidth, float viewportHeight) noexcept {
@@ -56,6 +70,7 @@ inline constexpr Color ringColor{90, 178, 232, 150};
 inline constexpr Color guideColor{90, 178, 232, 105};
 inline constexpr Color knobColor{120, 205, 255, 230};
 inline constexpr Color buttonColor{28, 112, 160, 220};
+inline constexpr Color ssrDisabledButtonColor{70, 82, 92, 210};
 inline constexpr Color textColor{245, 250, 255, 255};
 
 inline constexpr std::array<float, 4> normalized(Color color) {
@@ -71,6 +86,7 @@ inline constexpr std::string_view glyph(char character) {
     case 'F': return "111/100/110/100/100";
     case 'G': return "011/100/101/101/011";
     case 'P': return "110/101/110/100/100";
+    case 'R': return "110/101/110/101/101";
     case 'S': return "111/100/111/001/111";
     case ':': return "000/010/000/010/000";
     case '0': return "111/101/101/101/111";
