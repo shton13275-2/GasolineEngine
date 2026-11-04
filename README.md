@@ -376,3 +376,7 @@ The camera-depth prepass and directional shadow map prefer `R32_FLOAT`. On devic
 ## GPU SSR toggle
 
 In GPU mode, tap the **SSR** button at the top-right (immediately left of **CPU**) to enable or disable screen-space reflections. The keyboard shortcut **T** toggles the same setting on desktop. Disabling SSR leaves the GPU scene, lighting, shadows, SSAO, bloom, and tone mapping active; it skips only the SSR reflection contribution. This is a diagnostic comparison control, not a correction for the existing reflection artifact. Verify the visual difference on the target iPhone.
+
+## SSR diagnostic log
+
+The app writes `ssr.log` beside `startup.log` in SDL's platform-specific writable preference directory. On iOS this avoids writing into the read-only app bundle. The file is recreated at launch and records SSR toggle changes, plus once-per-second GPU frame state (SSR state, resolution, FPS, camera position, and GPU driver) and GPU frame errors. These are CPU-visible diagnostics only; per-pixel GPU ray hit/miss counters are not currently collected.
