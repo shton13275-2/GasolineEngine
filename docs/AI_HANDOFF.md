@@ -854,3 +854,11 @@ GPU shadow target format fallback — 2026-11-03
 - ssr.log now receives aggregate depth_valid_pixels, reflective_pixels, ray_march_pixels, ray_march_steps, avg_ray_steps, and ray_hit_pixels records, in addition to the existing CPU-side state.
 - This is an aggregate per-pixel diagnostic classification, not a fragment-stage atomic counter. The RGBA8 step channel is quantized. It does not prove that the hit color sampled is visually correct, and the physical iPhone result must still be inspected.
 - The diagnostic MRT/readback path and the updated embedded MSL require the matching Windows/iOS CI run and a new physical iPhone IPA test. Do not report the SSR artifact as fixed.
+
+
+### SSR diagnostic log analysis and receiver-only tracing — 2026-11-04
+
+- The user supplied nine SSR-on GPU samples and SSR-off samples from an iPhone using the Metal driver at 852×393. The GPU reported about 60 FPS. With SSR off, reflective_pixels, ray_march_pixels, ray_march_steps, and ray_hit_pixels were zero. With SSR on, depth-valid pixels ranged from 256,067 to 280,186; reflective-mask pixels ranged from 186,820 to 237,444; reported ray-hit pixels ranged from 36,934 to 45,783.
+- In every SSR-on sample, ray_march_pixels exactly equaled depth_valid_pixels. Source inspection confirmed the shader ran the ray loop for every valid depth pixel, regardless of whether the pixel belonged to the reflective floor. The final reflection weight was multiplied by surfaceMask, so non-floor hits did not contribute to the final image, but they inflated hit statistics and caused unnecessary ray tracing.
+- Commit 65b444a25c7871f811eaabfce5282872e5599395 now guards the ray-tracing block with surfaceMask > 0.001. New logs should show ray-march pixels restricted to floor receiver candidates and hit pixels restricted to that same set.
+- This is a confirmed source-level correction to tracing scope and diagnostic validity, not proof that the repeated/combed reflection artifact is fixed. The submitted log predates the change. Next verification requires the workflow for the new commit, a fresh IPA, and a new iPhone screenshot/log. If the artifact remains, continue with debug views for raw depth, reconstructed world position/floor mask, ray UV, and hit mask rather than blindly tuning ray step sizes.
