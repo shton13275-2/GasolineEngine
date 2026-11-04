@@ -371,3 +371,8 @@ The directional shadow map prefers `R32_FLOAT` when the GPU supports it as a sam
 The GPU fullscreen composite includes a floor-only screen-space reflection pass. It reconstructs world position from the camera-depth prepass, traces a reflected view ray against the sampled scene depth, and samples the scene color at the first accepted hit. SSR remains limited to visible on-screen geometry and can fail at screen edges or depth discontinuities; it is not ray tracing or a complete material-aware reflection system.
 
 The camera-depth prepass and directional shadow map prefer `R32_FLOAT`. On devices that require the `R8G8B8A8_UNORM` fallback, normalized depth is packed into RGB at 24-bit precision and decoded by SSR, SSAO, and shadow sampling. The precision correction is source-level until a new IPA is tested on a physical iPhone. Embedded MSL runtime compilation and the visible reflection result are not verified by ordinary C++ CI.
+
+
+## GPU SSR toggle
+
+In GPU mode, tap the **SSR** button at the top-right (immediately left of **CPU**) to enable or disable screen-space reflections. The keyboard shortcut **T** toggles the same setting on desktop. Disabling SSR leaves the GPU scene, lighting, shadows, SSAO, bloom, and tone mapping active; it skips only the SSR reflection contribution. This is a diagnostic comparison control, not a correction for the existing reflection artifact. Verify the visual difference on the target iPhone.
