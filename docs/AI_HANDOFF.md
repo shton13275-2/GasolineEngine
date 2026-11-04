@@ -862,3 +862,11 @@ GPU shadow target format fallback — 2026-11-03
 - In every SSR-on sample, ray_march_pixels exactly equaled depth_valid_pixels. Source inspection confirmed the shader ran the ray loop for every valid depth pixel, regardless of whether the pixel belonged to the reflective floor. The final reflection weight was multiplied by surfaceMask, so non-floor hits did not contribute to the final image, but they inflated hit statistics and caused unnecessary ray tracing.
 - Commit 65b444a25c7871f811eaabfce5282872e5599395 now guards the ray-tracing block with surfaceMask > 0.001. New logs should show ray-march pixels restricted to floor receiver candidates and hit pixels restricted to that same set.
 - This is a confirmed source-level correction to tracing scope and diagnostic validity, not proof that the repeated/combed reflection artifact is fixed. The submitted log predates the change. Next verification requires the workflow for the new commit, a fresh IPA, and a new iPhone screenshot/log. If the artifact remains, continue with debug views for raw depth, reconstructed world position/floor mask, ray UV, and hit mask rather than blindly tuning ray step sizes.
+
+### SSR receiver-only tracing and debug views — 2026-11-04
+
+- Commit 65b444a25c7871f811eaabfce5282872e5599395 adds a floor receiver guard (surfaceMask > 0.001) around the ray trace. This fixes the diagnostic mismatch where ray_march_pixels equaled depth_valid_pixels because every visible geometry pixel was traced. The earlier iPhone log predates this correction.
+- Added a temporary debug-view selector to GpuRenderer. The fullscreen composite reads the debug-view index from CompositeConstants.depthFlags.z: 0 normal output, 1 raw depth, 2 floor receiver mask, 3 hit mask over receiver mask, 4 hit UV.
+- The DBG touch button immediately left of SSR cycles modes on iPhone. Desktop V cycles the same modes. The SSR ON/OFF control remains independent.
+- The new debug UI/code changes were committed in subsequent commits on ios/initial-support. Verify the latest branch HEAD and matching CI before distributing an IPA.
+- This does not yet prove the reflection artifact is fixed. Use the debug views on a fresh iPhone build to determine whether depth, floor reconstruction, ray hits, or sampled hit UVs are spatially incorrect. Keep CPU renderer unchanged.
