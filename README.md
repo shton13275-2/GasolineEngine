@@ -21,7 +21,7 @@ For a complete, source-oriented handoff covering verified implementation status,
 - Near-plane clipping for cube faces and loaded mesh triangles, preserving the visible portion of geometry that crosses the camera's near plane
 - Animated perspective-projected 3D cube with six face colors and all three rotation axes
 - Renders multiple visible scene objects from shared OBJ mesh data, applying each object's position, rotation, scale, and visibility flag
-- Experimental SDL_GPU backend renders indexed OBJ meshes with depth testing, P3 PPM texture sampling, directional and emissive point lighting, optional 4x MSAA, screen-space bloom, mipmap capability fallback, and a GPU touch/FPS overlay; physical-device Metal behavior remains unverified
+- Experimental SDL_GPU backend renders indexed OBJ meshes with depth testing, P3 PPM texture sampling, metallic-roughness Cook-Torrance PBR, a directional shadow map, depth-neighborhood SSAO, experimental floor-only screen-space reflections, capability-gated HDR/ACES tone mapping, optional 4x MSAA, screen-space bloom, mipmap fallback, and a GPU touch/FPS overlay; physical-device Metal behavior and the current SSR image remain unverified
 - Press 1 or 2 to toggle the visibility of each demo pyramid at runtime
 - Press F3 to toggle wireframe rendering for the cube and loaded OBJ meshes in both CPU and GPU modes
 - Press F11 to toggle between windowed and fullscreen display
@@ -30,7 +30,7 @@ For a complete, source-oriented handoff covering verified implementation status,
 - Filled triangles and floor-grid lines use a CPU-side Z-buffer for per-pixel visibility
 - Software filled rendering is capped at 360,000 pixels per frame and scaled by SDL, preventing high-DPI windows and resizing from causing unbounded CPU and memory use
 - World-space perspective floor grid that responds to camera movement and is occluded by nearer geometry
-- GitHub Actions builds the Windows executable, runs all 11 CTest targets (camera, collision, scene management, OBJ loader, PPM image, software renderer, GPU geometry rules, GPU frame recovery, touch-overlay hit testing, backend-switch input, and procedural primitive meshes) plus a rendering smoke test, and uploads the executable as an artifact
+- GitHub Actions builds the Windows executable, runs all 12 CTest targets (camera, collision, scene management, shared scene render items, OBJ loader, PPM image, software renderer, GPU geometry rules, GPU frame recovery, touch-overlay hit testing, backend-switch input, and procedural primitive meshes) plus a rendering smoke test, and uploads the executable as an artifact
 
 > The CPU renderer is an initial CPU-side projection and SDL rasterization prototype, not a modern GPU 3D pipeline. Filled triangles and floor-grid lines use a CPU-side depth buffer; wireframe mode is still drawn as SDL lines without depth testing. Geometry crossing the near plane is clipped instead of being discarded wholesale. To keep frame time and memory bounded when a shape fills the view or the window is high-DPI, filled rendering uses at most 800 x 450 pixels and SDL scales it to the window. The separate experimental GPU backend is described below.
 
@@ -76,9 +76,11 @@ The current GitHub Actions workflow builds an arm64 iOS Device app bundle with t
 
 The app includes an initial virtual joystick on the left and a drag-to-look area on the right, with simultaneous movement and camera look. The IPA is unsigned and is not ready for ordinary device installation or App Store distribution. Physical-device startup, Metal rendering, touch behavior, and performance still require separate on-device verification.
 
+Before the iOS app build, the workflow extracts all eight embedded MSL source strings from `GpuRenderer.cpp`, compiles them with Xcode's Metal command-line compiler, and links a temporary Metal library. This catches MSL source compilation errors in CI; it does not prove runtime pipeline creation, device-specific format support, or correct rendering on an iPhone.
+
 ## GPU renderer (experimental)
 
-The app contains a separate `GpuRenderer` implementation using SDL_GPU. It packs the demo OBJ pyramid mesh and procedural rotating cube mesh into shared vertex/index buffers, then draws each visible scene instance with its own mesh range and camera/object transforms. Both pyramid instances and the animated cube are rendered in the same GPU frame. The cube uses a shared transform helper so CPU and GPU backends match its original center (0, 0, 4.2), unit scale, rotation animation, and matching CPU projection scale, uses a depth-stencil attachment, samples the bundled P3 PPM texture, and applies ambient, directional diffuse, Blinn-Phong specular, and an emissive cyan point light from the rotating cube. When the device supports the required color and depth formats, the scene uses 4x MSAA and resolves into a sampleable intermediate color target; otherwise it uses a single-sample target. A 9-tap screen-space bloom pass composites the scene to the swapchain, then the FPS label and touch-control overlay are drawn with a single-sample pipeline. This is a lightweight glow approximation, not ray tracing. Texture mipmaps are generated when the device reports the required format support; otherwise the renderer keeps a single-level texture.
+The app contains a separate `GpuRenderer` implementation using SDL_GPU. It packs the demo OBJ pyramid mesh, procedural rotating cube mesh, and floor mesh into shared vertex/index buffers, then draws visible scene instances with their own mesh ranges and transforms. The GPU material shader uses metallic-roughness Cook-Torrance PBR (GGX distribution, Smith-Schlick geometry, and Schlick Fresnel) with directional and attenuated emissive point lighting. A 1024×1024 directional shadow map uses a 3×3 PCF comparison. A single-sample camera-depth prepass feeds a depth-neighborhood SSAO approximation and an experimental floor-only screen-space reflection (SSR) pass. The scene prefers a sampleable `R16G16B16A16_FLOAT` HDR target when supported and applies ACES-fitted tone mapping in the final composite; otherwise it falls back to the swapchain color format. When the selected scene and depth formats support it, the scene uses 4x MSAA and resolves into the sampleable intermediate target; otherwise it uses a single-sample target. A 9-tap screen-space bloom pass runs after reflection and ambient occlusion, then the FPS label and touch-control overlay are drawn with a single-sample pipeline. The bloom is a lightweight glow approximation, not ray tracing. Texture mipmaps are generated when the device reports the required format support; otherwise the renderer keeps a single-level texture. The depth prepass and shadow map prefer `R32_FLOAT`; the `R8G8B8A8_UNORM` fallback packs normalized depth into 24-bit RGB.
 
 Press **G** on a keyboard, or use the on-screen backend switch control on touch devices, to request a CPU/GPU switch. If GPU initialization fails, the app attempts to recreate the CPU renderer. If a GPU frame fails, the app releases the GPU renderer and its window claim, then attempts to recreate the CPU renderer; the app exits only if CPU renderer recreation also fails.
 
@@ -114,7 +116,7 @@ On `ios/initial-support`, the workflow also sends a Discord build report after t
 include/engine/       Public engine headers
 src/engine/           Engine implementations
 src/main.cpp          Sample application entry point
-tests/                11 CTest targets plus the application smoke test, including backend-switch input and procedural primitive-mesh coverage
+tests/                12 CTest targets plus the application smoke test, including shared scene-render-item, backend-switch input, and procedural primitive-mesh coverage
 .github/workflows/    GitHub Actions workflow
 ```
 
@@ -156,9 +158,9 @@ Gasoline Engine は、C++20 を基盤として開発しているクロスプラ�
 - カメラの移動に応じて見え方が変わり、近いメッシュに隠れる、ワールド座標系の透視投影フロアグリッド
 - ソフトウェア描画は 1 フレームあたり 360,000 ピクセルに制限され、SDL により拡大表示されるため、高 DPI ウィンドウやリサイズで CPU・メモリ使用量が無制限に増加しない
 - 塗りつぶしポリゴンとフロアグリッド線に対応した CPU 側 Z バッファによるピクセル単位の奥行き判定
-- GitHub Actions による Windows 実行ファイルのビルド、11件の CTest（カメラ・衝突判定・シーン管理・OBJ ローダー・PPM 画像・ソフトウェアレンダラー・GPU ジオメトリ判定・GPU フレーム復旧・タッチボタンのヒット判定・バックエンド切替入力・プロシージャルメッシュ）、描画スモークテスト、および成果物のアップロード
+- GitHub Actions による Windows 実行ファイルのビルド、12件の CTest（カメラ・衝突判定・シーン管理・共通シーン描画項目・OBJ ローダー・PPM 画像・ソフトウェアレンダラー・GPU ジオメトリ判定・GPU フレーム復旧・タッチボタンのヒット判定・バックエンド切替入力・プロシージャルメッシュ）、描画スモークテスト、および成果物のアップロード
 
-> CPU 側には透視投影、Z バッファ、透視補正付き UV テクスチャ描画、近接平面クリッピング、ワイヤーフレームに対応したソフトウェアレンダラーがあります。別経路の実験的な SDL_GPU レンダラーもあり、OBJ メッシュ、シーンオブジェクト、深度テスト、P3 PPM テクスチャ、移動する発光ポイントライト、4x MSAA（対応デバイスのみ）、9タップのスクリーンスペースブルーム、タッチオーバーレイを描画します。このブルームはレイトレーシングではありません。GPU 経路は MSL を使用し、iPhone 実機での Metal 動作は未確認です。
+> CPU 側には透視投影、Z バッファ、透視補正付き UV テクスチャ描画、近接平面クリッピング、ワイヤーフレームに対応したソフトウェアレンダラーがあります。実験的な SDL_GPU レンダラーは、PBR、方向シャドウマップ、深度近傍 SSAO、床専用の実験的 SSR、対応時の HDR/ACES 合成、4x MSAA、9タップのブルーム、タッチオーバーレイを実装しています。深度形式の RGBA8 fallback では24-bit RGB packingを使用します。iOS CI は埋め込み MSL のコンパイルを検証しますが、iPhone 実機の Metal runtime と描画結果は未確認です。SSR は以前の実機テストでアーティファクトが確認されており、最新修正で解消したとはまだ確認できていません。
 
 ## カメラ操作
 
@@ -195,7 +197,7 @@ CPU/GPUの描画対象は `SceneRenderItem` の共通リストで管理します
 
 ## GPU レンダラー（実験段階）
 
-`GpuRenderer` は SDL_GPU を使い、デモ OBJ メッシュを頂点 / インデックスバッファへアップロードして、カメラと各 SceneObject の Transform を反映した描画を行います。深度ステンシル、P3 PPM テクスチャのサンプリング、環境光・方向光・Blinn-Phong スペキュラ、回転キューブを光源とする発光ポイントライトに対応しています。対応デバイスでは4x MSAAを使い、シーンをサンプル可能な中間テクスチャへ解決した後、9タップのスクリーンスペースブルームで合成します。非対応の場合はシングルサンプル描画を使います。FPS表示とタッチ操作オーバーレイは合成後に描画します。ブルームは軽量な発光表現であり、レイトレーシングではありません。デバイスが必要な形式をサポートする場合はテクスチャ mipmap を生成し、非対応の場合は単一レベルで動作します。
+`GpuRenderer` は SDL_GPU を使い、OBJ ピラミッド、回転キューブ、床のメッシュを共有 vertex/index buffer に格納して描画します。GPU マテリアルは GGX 分布・Smith-Schlick 幾何項・Schlick Fresnel を使う metallic-roughness Cook-Torrance PBR です。方向光と減衰付き発光ポイントライトに加え、1024×1024 の方向シャドウマップと3×3 PCFを使用します。単一サンプルのカメラ深度 prepass は、深度近傍 SSAO と床専用の実験的 SSR に使われます。対応デバイスでは `R16G16B16A16_FLOAT` の HDR scene target を優先し、最終合成で ACES fitted tone mapping を適用します。必要な color/depth format が対応する場合は4x MSAAを使い、非対応時は single-sample に fallback します。反射・SSAOの後に9タップのスクリーンスペースブルームを適用し、FPSとタッチオーバーレイを最後に描画します。ブルームは軽量な発光表現であり、レイトレーシングではありません。`R32_FLOAT` が使えない深度形式では、`R8G8B8A8_UNORM` に正規化深度を24-bit RGBとして格納します。テクスチャ mipmap は必要な形式が対応する場合に生成し、非対応時は単一レベルで動作します。
 
 キーボードの **G** キー、またはタッチ画面上のバックエンド切替操作で CPU / GPU の切替を要求できます。GPU 初期化に失敗した場合は CPU レンダラーの再生成を試みます。GPU のフレーム描画に失敗した場合も GPU リソースとウィンドウの所有権を解放して CPU レンダラーへの復帰を試みます。CPU レンダラーの再生成にも失敗した場合はアプリを終了します。
 

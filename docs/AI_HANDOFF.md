@@ -46,7 +46,7 @@ GasolineEngineは、C++20とSDL3を使ったクロスプラットフォーム3D�
 重要な現状認識:
 - CPUソフトウェアレンダラーは既に多くの機能を持つ。
 - GPU経路は試験的な段階だが、独立したGpuRendererでOBJメッシュ、複数SceneObject、深度テスト、タッチオーバーレイをSDL_GPU経由で描画する。
-- 現在のGPU経路はP3 PPMテクスチャのUVサンプリングと環境光・方向光・Blinn-Phongスペキュラを実装済み。iPhone実機でのMetal描画は未確認。
+- 現在のGPU経路はP3 PPMテクスチャ、Cook-Torrance metallic-roughness PBR（GGX / Smith-Schlick / Schlick Fresnel）、1024×1024方向シャドウマップ（3×3 PCF）、camera-depth prepassによるdepth-neighborhood SSAO、床専用の実験的SSR、対応時のR16G16B16A16_FLOAT HDR scene targetとACES fitted tone mapping、9-tap bloomを実装している。R32_FLOAT非対応時の深度fallbackは24-bit RGB packingを使う。iOS CIでは埋め込みMSLをMetal compilerでコンパイルするが、実機Metal pipeline/runtimeと描画結果は未確認。以前の実機スクリーンショットではSSR artifactが残っており、最新のdepth packing修正で解消したとはまだ確認できない。
 - 「GPU描画対応済み」「Metalシェーダーが実際にロードされる」といった表現は、コードと実機で確認できるまでは使わない。
 
 ## 2. ブランチ・作業対象の注意
@@ -136,9 +136,10 @@ GitHubには少なくとも次のブランチが存在する。
 - P3 ASCII PPMをRGBA8へ変換するPpmImageLoaderを追加。GPU側でSDL_GPUTextureへ転送し、fragment sampler slot 0へbindする。
 - OBJのUVはGPUへ渡し、画像の行方向に合わせてVを反転する。UVの有無は専用の頂点属性で管理し、負のUV値や0〜1範囲外の有効な座標を欠落扱いしない。UVがない頂点のみテクスチャなしfallbackにする。
 - OBJにvnがある場合はその法線を使用し、ない場合は三角形ごとのflat normalを生成する。
-- per-object uniformにMVP、model、inverse-transpose normal matrix、camera positionを渡す。fragment shaderはambient、directional diffuse、Blinn-Phong specularに加え、回転キューブの位置を使った減衰付きemissive point lightingを計算する。回転キューブはUVを持たず、PPM textureをサンプリングせずに全6面へ発光シアンを適用する。
-- GPU overlayはタッチガイド、FPS、CPU切替ボタンを描画する。シーンはサンプル可能な中間カラーtextureへ描画され、9-tap screen-space bloomでswapchainへ合成した後、single-sample overlay pipelineでUIを描画する。CPU側のfallbackは維持する。
-- GPU初期化はMSLを要求するため、Metal対応GPUを主対象とする。swapchain color/depth formatが対応する場合は4x MSAAを使い、非対応時はsingle-sampleへfallbackする。Windows CIのコンパイル成功はWindowsでのGPU runtime対応を意味しない。
+- per-object uniformにMVP、model、inverse-transpose normal matrix、camera position、material parameters、shadow transform、depth-format flagを渡す。fragment shaderはGGX distribution、Smith-Schlick geometry、Schlick FresnelによるCook-Torrance metallic-roughness PBRを方向光と減衰付きポイントライトに適用し、1024×1024 directional shadow mapを3×3 PCFで参照する。回転キューブはUVなしのemissive cyan materialを使う。
+- 単一サンプルcamera-depth prepassを行い、fullscreen compositeで8近傍depth SSAOと床専用の実験的SSRを計算する。SSRは64ステップのscreen-space ray marchと4段階のbinary refinementを使用するが、screen-edge/disocclusion制限があり、以前の実機スクリーンショットでは反射の繰り返し・櫛状artifactが確認されている。最新の24-bit depth fallback修正を含むIPAでの再確認は未実施。
+- scene colorは対応時にR16G16B16A16_FLOATのsampleable HDR targetを使い、final compositeでACES fitted tone mappingを適用する。4x MSAAはscene color/depth両formatが対応する場合だけ使い、非対応時はsingle-sampleへfallbackする。compositeは反射・SSAO後に9-tap bloomを適用し、single-sample overlay pipelineでUIを描画する。
+- camera-depth prepassとdirectional shadow mapはR32_FLOATを優先し、非対応時はR8G8B8A8_UNORMへnormalized depthを24-bit RGBでpack/unpackする。iOS CIではGpuRenderer.cppから8つの埋め込みMSL文字列を抽出し、Xcode Metal CLIでコンパイル・library linkする。この検証はMSL source compilationを確認するもので、runtime pipeline作成や実機描画を保証しない。
 
 ### Metal shaderの扱い
 - 現在実行時に使うmesh shaderは `src/engine/GpuRenderer.cpp` 内のMSL文字列。
@@ -189,10 +190,11 @@ GitHubには少なくとも次のブランチが存在する。
 - iOS unsigned IPA job:
   - macOS runner
   - Xcode generatorでiOS Device arm64 build
+  - `scripts/extract_msl_shaders.py` でGpuRenderer.cpp内の8つのMSL文字列を抽出し、`xcrun -sdk iphoneos metal`でAIRへコンパイル、Metal libraryへリンク
   - unsigned .appをIPA化
   - IPA integrity / bundle contents verify
   - artifact upload
-- 実際のworkflow runとjob結果は作業のたびにGitHub Actionsで確認する。古い成功runを最新変更の成功として扱わない。
+- 実際のworkflow runとjob結果は作業のたびにGitHub Actionsで確認する。古い成功runを最新変更の成功として扱わない。iOS jobのMSL compile stepは埋め込みshaderのsource compilationを検証するが、Metal runtime pipelineやiPhoneの見た目を検証するものではない。
 - Discord通知は `ios/initial-support` のワークフローだけで送信する。`main` ではDiscord通知jobを実行しない。
 - iOS側のDiscord通知jobはWindowsとiOSの両jobに依存し、iOS unsigned IPA jobが成功した場合にのみ実行する。通知本文にはWindows/iOS両方の結果を含める。Windowsが失敗した場合もiOSが成功すれば結果をまとめて通知する。
 - Discord通知の詳細欄はWindows/iOSのjobだけを含め、Discord通知job自身は除外する。詳細文字列は1,000文字以下に制限し、Embedの各フィールド・説明・総文字数を送信前に検証する。DiscordへのHTTPエラー時はレスポンス本文をActionsログへ出す。Discord通知jobが失敗すると、Windows/iOSのビルドが成功していてもworkflow全体の結論はfailureになるため、個別jobの結果を分けて確認する。
@@ -218,7 +220,7 @@ GitHubには少なくとも次のブランチが存在する。
 | `shaders/Source/` | HLSL shader source |
 | `assets/demo.obj` | デモ用ピラミッド |
 | `assets/demo_texture.ppm` | デモ用テクスチャ |
-| `tests/` | 11 CTest targets: カメラ、衝突、シーン、OBJ、PPM、Renderer、GPU復旧、GPUジオメトリ、タッチオーバーレイ、backend switch input、primitive meshes |
+| `tests/` | 12 CTest targets: カメラ、衝突、シーン、shared scene render items、OBJ、PPM、Renderer、GPU復旧、GPUジオメトリ、タッチオーバーレイ、backend switch input、primitive meshes |
 | `.github/workflows/build.yml` | Windows build/testとiOS unsigned IPA |
 
 ## 7. 操作方法
@@ -812,3 +814,12 @@ GPU shadow target format fallback — 2026-11-03
 - The previous fallback wrote projected depth only to the red channel, reducing the sampled depth to 8-bit precision. That precision is too coarse for the SSR crossing thresholds (`0.0008` minimum crossing and `0.006` maximum accepted delta) and could create unstable hit classification when the fallback is selected.
 - The fallback now packs normalized depth into RGB as a 24-bit value and decodes it for SSR center/ray/refinement samples, SSAO neighbor samples, and directional shadow comparisons. The `R32_FLOAT` path continues to store/read the red channel directly.
 - This is a source-level precision correction. It does not yet prove that the iPhone selected the fallback format or that the reflection artifact is resolved. Embedded MSL compilation is not covered by the normal C++ CI; verify the new iOS IPA on a physical iPhone and record the visual result separately.
+
+
+## Embedded MSL compile in iOS CI — 2026-11-04
+
+- Added `scripts/extract_msl_shaders.py` to extract the eight raw MSL string constants from `src/engine/GpuRenderer.cpp`: mesh vertex/fragment, shadow vertex/fragment, bloom vertex/fragment, and overlay vertex/fragment.
+- The iOS workflow compiles each extracted source with `xcrun -sdk iphoneos metal -c` and links the AIR outputs into a temporary `.metallib` before building the unsigned app. This is a CI source-compilation check; the runtime still creates SDL_GPU shaders from embedded MSL strings.
+- This check is intended to catch MSL syntax/type/compiler errors that the C++ compiler cannot see. It does not verify SDL_GPU pipeline creation, device-specific texture-format support, shader binding compatibility at runtime, or visual rendering on a physical iPhone.
+- Updated the current implementation summary to reflect Cook-Torrance PBR, directional shadow mapping, depth-neighborhood SSAO, experimental floor-only SSR, HDR/ACES compositing, and 24-bit packed depth fallback. The physical screenshot from the earlier IPA still showed repeated/combed SSR artifacts; the latest packed-depth change has not yet been verified on-device.
+- CMakeLists.txt currently registers 12 CTest targets, including `scene_render_items`; README and handoff counts now match the actual registrations.

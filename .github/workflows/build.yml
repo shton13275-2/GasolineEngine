@@ -24,6 +24,7 @@ jobs:
             include
             shaders
             src
+            scripts
             tests
           sparse-checkout-cone-mode: true
 
@@ -67,6 +68,7 @@ jobs:
             include
             shaders
             src
+            scripts
             tests
           sparse-checkout-cone-mode: true
 
@@ -98,6 +100,35 @@ jobs:
           -DORIGINALENGINE_BUILD_APP=ON
           -DBUILD_TESTING=OFF
           -DFETCHCONTENT_UPDATES_DISCONNECTED=ON
+
+      - name: Compile embedded Metal shader sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/extract_msl_shaders.py \\
+            --source src/engine/GpuRenderer.cpp \\
+            --output build-ios/embedded-metal
+
+          mkdir -p build-ios/embedded-metal/air
+          shopt -s nullglob
+          shader_sources=(build-ios/embedded-metal/*.metal)
+          if [ "${#shader_sources[@]}" -ne 8 ]; then
+            echo "::error::Expected eight embedded MSL source files, found ${#shader_sources[@]}."
+            exit 1
+          fi
+
+          air_files=()
+          for shader_source in "${shader_sources[@]}"; do
+            shader_name="$(basename "$shader_source" .metal)"
+            air_file="build-ios/embedded-metal/air/$shader_name.air"
+            xcrun -sdk iphoneos metal -c "$shader_source" -o "$air_file"
+            air_files+=("$air_file")
+          done
+
+          xcrun -sdk iphoneos metal \\
+            -o build-ios/embedded-metal/GasolineEngine.metallib \\
+            "${air_files[@]}"
+          test -s build-ios/embedded-metal/GasolineEngine.metallib
 
       - name: Verify iOS bundle identifier setting
         shell: bash

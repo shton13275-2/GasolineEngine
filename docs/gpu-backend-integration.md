@@ -12,12 +12,13 @@ This document describes the implementation on `ios/initial-support`, not an unim
 - A triangle is textured only if all three corners have UV coordinates. The production path uses the shared `gpu_detail::triangleHasCompleteTexCoords` rule in `include/engine/GpuGeometryRules.hpp`; otherwise all three vertices use the untextured vertex-color path. This keeps the varying constant across the primitive.
 - Per-object constants include model, MVP, inverse-transpose normal matrix, and camera position. OBJ vertex normals are used when valid; missing normals use generated flat face normals.
 - The mesh pass uses depth testing/writes and a depth-stencil texture. The depth texture is recreated when swapchain dimensions change.
-- The GPU fragment shader samples the P3 PPM-derived RGBA texture and applies ambient, directional diffuse, Blinn-Phong specular, and distance-attenuated emissive point lighting from the rotating cube.
+- The GPU fragment shader samples the P3 PPM-derived RGBA texture and applies metallic-roughness Cook-Torrance PBR (GGX normal distribution, Smith-Schlick geometry, and Schlick Fresnel) to directional and distance-attenuated point lighting from the emissive rotating cube. A 1024×1024 directional shadow map modulates directional lighting with a 3×3 PCF comparison.
 - A GPU overlay pass draws touch-control guides, movement knob, FPS text, and CPU backend switch control. It does not use the CPU `SDL_Renderer` while the window is claimed by SDL_GPU.
 - The backend-switch touch hit region is computed from the same shared pixel rectangle constants used by CPU and GPU overlay drawing (`touch_overlay::containsBackendButton`).
 - The texture path requests a full mip chain when the device reports support for the required RGBA8 sampler + color-target usage. Otherwise it retains a single-level texture.
-- The scene uses 4x MSAA only when the swapchain color format and depth format report 4x support. The multisample scene target resolves into a single-sample, sampleable intermediate color texture; devices without 4x support use a single-sample scene target.
-- A full-screen 9-tap screen-space bloom pass composites the intermediate scene texture to the swapchain. The touch/FPS overlay is drawn after that composite with a single-sample pipeline. This is a lightweight glow approximation, not ray tracing or global illumination.
+- The scene color target prefers sampleable `R16G16B16A16_FLOAT` when the device reports color-target and sampler support; otherwise it uses the swapchain format. The final composite applies ACES-fitted tone mapping. 4x MSAA is enabled only when the selected scene color and depth formats support it; the multisample target resolves into a single-sample intermediate, otherwise the scene uses a single-sample target.
+- A single-sample camera-depth prepass writes normalized depth into the same selected depth-color format. The fullscreen composite evaluates an eight-neighbor depth-neighborhood SSAO approximation and an experimental floor-only SSR ray march (64 samples, four binary-refinement iterations), then applies the existing 9-tap screen-space bloom and tone map. The touch/FPS overlay is drawn last with a single-sample pipeline. SSR remains limited by screen edges and disocclusions; an earlier physical-device screenshot showed repeated/combed reflection artifacts, and the latest depth-precision correction has not yet been checked on-device.
+- The depth prepass and directional shadow map prefer `R32_FLOAT`. When the renderer falls back to `R8G8B8A8_UNORM`, normalized depth is packed into RGB at 24-bit precision and decoded by the SSAO, SSR, and shadow-sampling paths. The fallback path is source-level and CI-compiled; the actual format selected by an iPhone GPU is not yet recorded.
 - Before texture allocation/upload, `RgbaImage::hasValidRgba8Data()` checks nonzero dimensions, exact tightly packed RGBA8 byte count, and the SDL_GPU transfer-buffer size limit.
 
 ## Backend switching and failure behavior
@@ -38,6 +39,7 @@ Keyboard input **G** requests a backend switch. The touch interface also has a t
 
 ## Tests and remaining verification
 
+- `scene_render_items` verifies shared CPU/GPU render-item mesh/object/texture/index bindings, backend participation flags, and material values/defaults.
 - `gpu_geometry_rules` tests all eight boolean combinations for UV presence across the three triangle corners. It verifies the shared policy predicate used by `buildGpuGeometry`; it does not execute SDL_GPU geometry upload or a shader.
 - `touch_overlay_hit_test` verifies that normalized touch coordinates are tested against the same backend-switch rectangle drawn by both renderers, including landscape/portrait dimensions and exclusive right/bottom edges.
 - `ppm_image_loader` tests decoded RGBA8 data validation, including incorrect byte counts and dimensions exceeding the supported upload size.
@@ -47,7 +49,8 @@ Keyboard input **G** requests a backend switch. The touch interface also has a t
 - MTL material parsing and per-material texture selection are not implemented.
 - GPU PNG/JPEG/BMP texture loading is not implemented; the GPU texture input currently comes from the P3 PPM loader.
 - GPU wireframe rendering is implemented with a separate `SDL_GPU_FILLMODE_LINE` pipeline and retains depth testing. A shared CPU/GPU renderer interface is not implemented.
-- Physical iPhone verification of Metal shader compilation, texture sampling, lighting, touch interaction, and repeated backend switching remains outstanding.
+- The iOS workflow now extracts and compiles all eight embedded MSL sources with Xcode's Metal command-line compiler and links a temporary Metal library. This catches source compilation errors but does not verify SDL_GPU runtime pipeline creation or device behavior.
+- Physical iPhone verification of runtime Metal pipeline creation, texture sampling, PBR/shadow/SSAO/SSR output, touch interaction, and repeated backend switching remains outstanding.
 - Long-running GPU resource lifecycle and leak testing remains outstanding.
 
 ## Verification guidance
@@ -98,3 +101,8 @@ Keyboard input **G** requests a backend switch. The touch interface also has a t
 - The RGBA8 fallback now packs normalized depth into RGB at 24-bit precision rather than writing depth only to the 8-bit red channel. The packed-format flag is passed through the relevant GPU uniforms/varyings.
 - The composite shader decodes packed depth for the SSR receiver depth, each ray-march sample, binary-refinement samples, and SSAO neighbors. The mesh fragment shader decodes the packed directional shadow-map samples. R32_FLOAT remains unmodified.
 - The change addresses a confirmed precision weakness in the RGBA8 fallback, but the selected format on the target iPhone is not yet known. Embedded MSL runtime compilation and the visual reflection result still require physical-device verification.
+
+
+## Embedded Metal source compilation in CI
+
+The iOS job extracts the eight raw MSL strings embedded in `src/engine/GpuRenderer.cpp` with `scripts/extract_msl_shaders.py`, compiles each source to Metal IR with `xcrun -sdk iphoneos metal -c`, and links the outputs into a temporary `.metallib`. The application continues to pass embedded MSL strings to SDL_GPU at runtime; the temporary library is only a CI validation artifact and is not bundled into the IPA. Apple's command-line workflow for compiling MSL to IR and linking a Metal library is documented in [Building a shader library by precompiling source files](https://developer.apple.com/documentation/metal/building-a-shader-library-by-precompiling-source-files). This CI step validates shader source compilation, not runtime pipeline creation, device-specific format support, or the rendered result.
