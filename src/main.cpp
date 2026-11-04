@@ -339,6 +339,7 @@ int main(int argc, char* argv[]) {
         bool running = true;
         bool mouseCaptured = false;
         bool wireframe = false;
+        bool ssrEnabled = true;
         bool animationPaused = false;
         bool fullscreen = false;
         SDL_FingerID movementFinger = 0;
@@ -359,7 +360,13 @@ int main(int argc, char* argv[]) {
                     (event.type == SDL_EVENT_FINGER_DOWN || event.type == SDL_EVENT_FINGER_MOTION ||
                      event.type == SDL_EVENT_FINGER_UP)) {
                     if (event.type == SDL_EVENT_FINGER_DOWN) {
-                        if (originalengine::touch_overlay::containsBackendButton(
+                        if (gpuMode && originalengine::touch_overlay::containsSsrButton(
+                                event.tfinger.x, event.tfinger.y,
+                                static_cast<float>(touchWidth),
+                                static_cast<float>(touchHeight))) {
+                            ssrEnabled = !ssrEnabled;
+                            writeDiagnostic(std::string("SSR ") + (ssrEnabled ? "enabled" : "disabled"));
+                        } else if (originalengine::touch_overlay::containsBackendButton(
                                 event.tfinger.x, event.tfinger.y,
                                 static_cast<float>(touchWidth),
                                 static_cast<float>(touchHeight))) {
@@ -405,6 +412,10 @@ int main(int argc, char* argv[]) {
                 } else if (!smokeTest && event.type == SDL_EVENT_KEY_DOWN &&
                            !event.key.repeat && event.key.key == SDLK_EQUALS) {
                     camera.adjustMouseSensitivity(0.0005F);
+                } else if (!smokeTest && event.type == SDL_EVENT_KEY_DOWN &&
+                           !event.key.repeat && event.key.key == SDLK_T) {
+                    ssrEnabled = !ssrEnabled;
+                    writeDiagnostic(std::string("SSR ") + (ssrEnabled ? "enabled" : "disabled"));
                 } else if (!smokeTest && event.type == SDL_EVENT_KEY_DOWN &&
                            !event.key.repeat && event.key.key == SDLK_SPACE) {
                     animationPaused = !animationPaused;
@@ -498,7 +509,6 @@ int main(int argc, char* argv[]) {
                 }
             }
             if (exitCode != 0) break;
-
             const Uint64 currentTicks = SDL_GetTicks();
             const float frameSeconds =
                 static_cast<float>(currentTicks - previousTicks) / 1000.0F;
@@ -558,7 +568,8 @@ int main(int argc, char* argv[]) {
                         if (gpuRenderer == nullptr) return false;
                         const bool rendered = gpuRenderer->renderFrame(
                             camera, renderItems, !smokeTest, backendSwitchInput.hasMovementFinger,
-                            backendSwitchInput.movementX, backendSwitchInput.movementY, smoothedFps, wireframe);
+                            backendSwitchInput.movementX, backendSwitchInput.movementY, smoothedFps,
+                            wireframe, ssrEnabled);
                         if (!rendered) gpuFailure = gpuRenderer->lastError();
                         return rendered;
                     },
