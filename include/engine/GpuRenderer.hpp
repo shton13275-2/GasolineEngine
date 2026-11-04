@@ -30,7 +30,8 @@ public:
         const Camera& camera, const std::vector<SceneRenderItem>& renderItems,
         bool showTouchControls = true, bool movementActive = false,
         float movementX = 0.0F, float movementY = 0.0F,
-        float framesPerSecond = 0.0F, bool wireframe = false);
+        float framesPerSecond = 0.0F, bool wireframe = false,
+        bool ssrEnabled = true);
     void shutdown() noexcept;
 
     [[nodiscard]] const std::string& lastError() const noexcept { return lastError_; }
@@ -50,7 +51,8 @@ private:
                            const float color[4]);
     void drawOverlay(SDL_GPUCommandBuffer* commandBuffer, SDL_GPURenderPass* pass,
                      Uint32 width, Uint32 height, bool movementActive,
-                     float movementX, float movementY, float framesPerSecond);
+                     float movementX, float movementY, float framesPerSecond,
+                     bool ssrEnabled);
     void drawOverlayText(SDL_GPUCommandBuffer* commandBuffer, SDL_GPURenderPass* pass,
                          float x, float y, const char* text, Uint32 viewportWidth,
                          Uint32 viewportHeight, const float color[4]);
