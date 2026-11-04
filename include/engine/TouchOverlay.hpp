@@ -26,6 +26,8 @@ inline constexpr float backendButtonWidth = 98.0F;
 inline constexpr float backendButtonHeight = 42.0F;
 inline constexpr float ssrButtonRight = backendButtonRight + backendButtonWidth + 8.0F;
 inline constexpr float ssrButtonWidth = 72.0F;
+inline constexpr float ssrDebugButtonRight = ssrButtonRight + ssrButtonWidth + 8.0F;
+inline constexpr float ssrDebugButtonWidth = 64.0F;
 inline constexpr float fontPixelSize = 2.0F;
 inline constexpr float fontAdvance = 12.0F;
 inline constexpr float fontHeight = 10.0F;
@@ -38,6 +40,18 @@ inline constexpr bool containsSsrButton(
     if (viewportWidth <= 0.0F || viewportHeight <= 0.0F) return false;
     const float left = (viewportWidth - ssrButtonRight - ssrButtonWidth) / viewportWidth;
     const float right = (viewportWidth - ssrButtonRight) / viewportWidth;
+    const float top = backendButtonY / viewportHeight;
+    const float bottom = (backendButtonY + backendButtonHeight) / viewportHeight;
+    return normalizedX >= left && normalizedX < right &&
+           normalizedY >= top && normalizedY < bottom;
+}
+
+inline constexpr bool containsSsrDebugButton(
+    float normalizedX, float normalizedY,
+    float viewportWidth, float viewportHeight) noexcept {
+    if (viewportWidth <= 0.0F || viewportHeight <= 0.0F) return false;
+    const float left = (viewportWidth - ssrDebugButtonRight - ssrDebugButtonWidth) / viewportWidth;
+    const float right = (viewportWidth - ssrDebugButtonRight) / viewportWidth;
     const float top = backendButtonY / viewportHeight;
     const float bottom = (backendButtonY + backendButtonHeight) / viewportHeight;
     return normalizedX >= left && normalizedX < right &&
@@ -81,7 +95,9 @@ inline constexpr std::array<float, 4> normalized(Color color) {
 // 3x5 bitmap glyphs are intentionally shared so text is pixel-identical.
 inline constexpr std::string_view glyph(char character) {
     switch (character) {
+    case 'B': return "110/101/110/101/110";
     case 'C': return "011/100/100/100/011";
+    case 'D': return "110/101/101/101/110";
     case 'U': return "101/101/101/101/111";
     case 'F': return "111/100/110/100/100";
     case 'G': return "011/100/101/101/011";
