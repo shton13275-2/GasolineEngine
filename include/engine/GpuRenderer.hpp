@@ -43,7 +43,7 @@ public:
         bool showTouchControls = true, bool movementActive = false,
         float movementX = 0.0F, float movementY = 0.0F,
         float framesPerSecond = 0.0F, bool wireframe = false,
-        bool ssrEnabled = true);
+        bool ssrEnabled = true, Uint32 ssrDebugView = 0);
     void shutdown() noexcept;
 
     [[nodiscard]] const std::string& lastError() const noexcept { return lastError_; }
@@ -68,7 +68,7 @@ private:
     void drawOverlay(SDL_GPUCommandBuffer* commandBuffer, SDL_GPURenderPass* pass,
                      Uint32 width, Uint32 height, bool movementActive,
                      float movementX, float movementY, float framesPerSecond,
-                     bool ssrEnabled);
+                     bool ssrEnabled, Uint32 ssrDebugView);
     void drawOverlayText(SDL_GPUCommandBuffer* commandBuffer, SDL_GPURenderPass* pass,
                          float x, float y, const char* text, Uint32 viewportWidth,
                          Uint32 viewportHeight, const float color[4]);
