@@ -844,3 +844,13 @@ GPU shadow target format fallback — 2026-11-03
 - The file is truncated/recreated at launch. SSR ON/OFF transitions are logged immediately. While GPU rendering succeeds, at most one state record per second is written with SSR state, pixel resolution, smoothed FPS, camera coordinates, and GPU driver. GPU frame errors are recorded.
 - This is a first-stage CPU-side diagnostic log. It does not contain shader-internal depth-valid-pixel counts, ray-march counts, hit/miss counts, or reflection weights. Those values require GPU-side counters and an explicit readback path, which are not part of this change.
 - iOS IPA build and physical iPhone file access still need verification. The exact visible location can be retrieved from the app's SDL preference directory; it is not a folder inside the installed app bundle.
+
+
+### SSR GPU diagnostic readback — 2026-11-04
+
+- Extended the fullscreen composite fragment shader to write a second RGBA8 diagnostic color target alongside the normal swapchain color output.
+- Per-pixel channels encode: valid camera-depth sample, floor receiver mask, ray-march step count normalized to 64 steps, and ray-hit flag.
+- The renderer downloads the diagnostic texture to a SDL GPU download transfer buffer at most once per second. It submits that copy with SDL_SubmitGPUCommandBufferAndAcquireFence, polls the fence on later frames, and only maps/aggregates the transfer buffer after the fence signals. This avoids a synchronous per-frame readback.
+- ssr.log now receives aggregate depth_valid_pixels, reflective_pixels, ray_march_pixels, ray_march_steps, avg_ray_steps, and ray_hit_pixels records, in addition to the existing CPU-side state.
+- This is an aggregate per-pixel diagnostic classification, not a fragment-stage atomic counter. The RGBA8 step channel is quantized. It does not prove that the hit color sampled is visually correct, and the physical iPhone result must still be inspected.
+- The diagnostic MRT/readback path and the updated embedded MSL require the matching Windows/iOS CI run and a new physical iPhone IPA test. Do not report the SSR artifact as fixed.
