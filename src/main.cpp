@@ -30,6 +30,13 @@
 namespace {
 
 std::string diagnosticLogPath;
+std::string ssrDiagnosticLogPath;
+
+void writeSsrDiagnostic(const std::string& message) {
+    if (ssrDiagnosticLogPath.empty()) return;
+    std::ofstream log(ssrDiagnosticLogPath, std::ios::app);
+    if (log) log << message << '\n';
+}
 
 void writeDiagnostic(const std::string& message) {
     std::cerr << "[OriginalEngine] " << message << '\n';
@@ -43,9 +50,15 @@ void initializeDiagnosticLog() {
     char* prefPath = SDL_GetPrefPath("com.gasolineengine", "GasolineEngine");
     if (prefPath != nullptr) {
         diagnosticLogPath = std::string(prefPath) + "startup.log";
+        ssrDiagnosticLogPath = std::string(prefPath) + "ssr.log";
         SDL_free(prefPath);
         std::ofstream log(diagnosticLogPath, std::ios::trunc);
         if (log) log << "Gasoline Engine startup diagnostics\n";
+        std::ofstream ssrLog(ssrDiagnosticLogPath, std::ios::trunc);
+        if (ssrLog) {
+            ssrLog << "Gasoline Engine SSR diagnostics\n";
+            ssrLog << "Note: CPU-side render state only; GPU ray hit/miss counters are not collected.\n";
+        }
     }
 }
 
@@ -346,6 +359,7 @@ int main(int argc, char* argv[]) {
         SDL_FingerID lookFinger = 0;
         originalengine::BackendSwitchInputState backendSwitchInput;
         Uint64 previousTicks = SDL_GetTicks();
+        Uint64 lastSsrDiagnosticTicks = previousTicks;
         double elapsedSeconds = 0.0;
         float smoothedFps = 0.0F;
 
@@ -366,6 +380,7 @@ int main(int argc, char* argv[]) {
                                 static_cast<float>(touchHeight))) {
                             ssrEnabled = !ssrEnabled;
                             writeDiagnostic(std::string("SSR ") + (ssrEnabled ? "enabled" : "disabled"));
+                            writeSsrDiagnostic(std::string("toggle=") + (ssrEnabled ? "on" : "off"));
                         } else if (originalengine::touch_overlay::containsBackendButton(
                                 event.tfinger.x, event.tfinger.y,
                                 static_cast<float>(touchWidth),
@@ -416,6 +431,7 @@ int main(int argc, char* argv[]) {
                            !event.key.repeat && event.key.key == SDLK_T) {
                     ssrEnabled = !ssrEnabled;
                     writeDiagnostic(std::string("SSR ") + (ssrEnabled ? "enabled" : "disabled"));
+                            writeSsrDiagnostic(std::string("toggle=") + (ssrEnabled ? "on" : "off"));
                 } else if (!smokeTest && event.type == SDL_EVENT_KEY_DOWN &&
                            !event.key.repeat && event.key.key == SDLK_SPACE) {
                     animationPaused = !animationPaused;
@@ -480,6 +496,7 @@ int main(int argc, char* argv[]) {
                     if (gpuRenderer->initialize(window, gpuMeshes, demoTexture)) {
                         gpuMode = true;
                         writeDiagnostic("GPU renderer active: " + gpuRenderer->driverName());
+                        writeSsrDiagnostic("gpu_renderer_active driver=" + gpuRenderer->driverName());
                         SDL_SetWindowTitle(window, "Gasoline Engine | GPU preview | G: switch to CPU");
                     } else {
                         writeDiagnostic("GPU renderer initialization failed: " + gpuRenderer->lastError());
@@ -570,7 +587,24 @@ int main(int argc, char* argv[]) {
                             camera, renderItems, !smokeTest, backendSwitchInput.hasMovementFinger,
                             backendSwitchInput.movementX, backendSwitchInput.movementY, smoothedFps,
                             wireframe, ssrEnabled);
-                        if (!rendered) gpuFailure = gpuRenderer->lastError();
+                        if (!rendered) {
+                            gpuFailure = gpuRenderer->lastError();
+                            writeSsrDiagnostic(std::string("frame_error=") + gpuFailure);
+                        } else {
+                            const Uint64 diagnosticTicks = SDL_GetTicks();
+                            if (diagnosticTicks - lastSsrDiagnosticTicks >= 1000U) {
+                                lastSsrDiagnosticTicks = diagnosticTicks;
+                                writeSsrDiagnostic(
+                                    std::string("frame ssr=") + (ssrEnabled ? "on" : "off") +
+                                    " resolution=" + std::to_string(touchWidth) + "x" +
+                                    std::to_string(touchHeight) +
+                                    " fps=" + std::to_string(smoothedFps) +
+                                    " camera=" + std::to_string(camera.x()) + "," +
+                                    std::to_string(camera.y()) + "," +
+                                    std::to_string(camera.z()) +
+                                    " driver=" + gpuRenderer->driverName());
+                            }
+                        }
                         return rendered;
                     },
                     [&]() {
