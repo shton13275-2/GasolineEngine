@@ -831,3 +831,9 @@ GPU shadow target format fallback — 2026-11-03
 - On iOS/GPU mode, a dedicated `SSR` button is drawn to the left of the existing `CPU` backend-switch button. Its blue state indicates SSR enabled; its muted state indicates SSR disabled. The hit region is defined in `include/engine/TouchOverlay.hpp` and covered by `touch_overlay_hit_test`.
 - Keyboard **T** toggles SSR on desktop. The toggle state is held by `src/main.cpp` and passed to `GpuRenderer::renderFrame`; it resets to enabled on application startup.
 - This is a diagnostic isolation control, not a fix for the reflection artifact. Compare the same scene with SSR enabled and disabled on the physical iPhone. No visual result is claimed until that test is performed.
+
+
+### Overlay MSL compile fix — 2026-11-04
+
+- The iOS Metal source compilation check exposed a malformed directive in the embedded `overlayVertexSource`: `#include <metal_stdlib>using namespace metal;` had no newline between the include and namespace directive. This prevented Metal's standard math functions (`cos`, `sin`, `max`) from resolving in that shader.
+- Restored the newline so the extracted source contains separate include and `using namespace metal;` lines. This is a source-level correction; the follow-up Actions run must confirm Metal compilation.
