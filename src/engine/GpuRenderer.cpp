@@ -355,6 +355,7 @@ fragment BloomFragmentOutput bloom_fragment(
     float diagnosticReceiverMask = 0.0;
     float diagnosticRayMarchSteps = 0.0;
     float diagnosticRayHit = 0.0;
+    float2 diagnosticHitUV = float2(0.0);
 
     // Reconstruct a world-space position from the camera depth prepass.
     // Neighbor positions provide a screen-space normal estimate without
@@ -456,6 +457,7 @@ fragment BloomFragmentOutput bloom_fragment(
 
         if (hitFound) {
             diagnosticRayHit = 1.0;
+            diagnosticHitUV = hitUV;
             reflectionColor = sceneTexture.sample(sceneSampler, hitUV).rgb;
             const float distanceFade = 1.0 - clamp(hitDistance / 3.0, 0.0, 1.0);
             reflectionWeight = surfaceMask * screenFade *
@@ -508,8 +510,23 @@ fragment BloomFragmentOutput bloom_fragment(
     const float3 numerator = hdrColor * (2.51 * hdrColor + 0.03);
     const float3 denominator = hdrColor * (2.43 * hdrColor + 0.59) + 0.14;
     const float3 mapped = clamp(numerator / max(denominator, 0.0001), 0.0, 1.0);
+    float3 finalColor = mapped;
+    const uint debugView = uint(constants.depthFlags.z + 0.5);
+    if (debugView == 1) {
+        finalColor = centerDepth < 0.999
+            ? float3(centerDepth) : float3(0.0);
+    } else if (debugView == 2) {
+        finalColor = float3(diagnosticReceiverMask,
+                            1.0 - diagnosticReceiverMask, 0.0);
+    } else if (debugView == 3) {
+        finalColor = float3(diagnosticRayHit,
+                            diagnosticReceiverMask, 0.0);
+    } else if (debugView == 4) {
+        finalColor = diagnosticRayHit > 0.5
+            ? float3(diagnosticHitUV, 1.0) : float3(0.0);
+    }
     BloomFragmentOutput output;
-    output.color = float4(mapped, 1.0);
+    output.color = float4(finalColor, 1.0);
     output.diagnostics = float4(
         centerDepth < 0.999 ? 1.0 : 0.0,
         diagnosticReceiverMask,
@@ -1697,7 +1714,7 @@ void GpuRenderer::processSsrDiagnosticsReadback() {
 bool GpuRenderer::renderFrame(
     const Camera& camera, const std::vector<SceneRenderItem>& renderItems,
     bool showTouchControls, bool movementActive, float movementX, float movementY,
-    float framesPerSecond, bool wireframe, bool ssrEnabled) {
+    float framesPerSecond, bool wireframe, bool ssrEnabled, Uint32 ssrDebugView) {
     processSsrDiagnosticsReadback();
     if (device_ == nullptr || window_ == nullptr || pipeline_ == nullptr ||
         wireframePipeline_ == nullptr || bloomPipeline_ == nullptr ||
@@ -1928,12 +1945,13 @@ bool GpuRenderer::renderFrame(
     compositeConstants.cameraPosition[3] = 1.0F;
     compositeConstants.depthFlags[0] = shadowDepthPacked_ ? 1.0F : 0.0F;
     compositeConstants.depthFlags[1] = ssrEnabled ? 1.0F : 0.0F;
+    compositeConstants.depthFlags[2] = static_cast<float>(ssrDebugView);
     SDL_PushGPUFragmentUniformData(commandBuffer, 0, &compositeConstants,
         static_cast<Uint32>(sizeof(compositeConstants)));
     SDL_DrawGPUPrimitives(compositePass, 3, 1, 0, 0);
     if (showTouchControls && overlayPipeline_ != nullptr) {
         drawOverlay(commandBuffer, compositePass, width, height, movementActive, movementX, movementY,
-                    framesPerSecond, ssrEnabled);
+                    framesPerSecond, ssrEnabled, ssrDebugView);
     }
     SDL_EndGPURenderPass(compositePass);
 
@@ -2038,7 +2056,7 @@ void GpuRenderer::drawOverlayText(
 void GpuRenderer::drawOverlay(
     SDL_GPUCommandBuffer* commandBuffer, SDL_GPURenderPass* pass,
     Uint32 width, Uint32 height, bool movementActive, float movementX, float movementY,
-    float framesPerSecond, bool ssrEnabled) {
+    float framesPerSecond, bool ssrEnabled, Uint32 ssrDebugView) {
     SDL_BindGPUGraphicsPipeline(pass, overlayPipeline_);
     using namespace touch_overlay;
     const float dimension = static_cast<float>(std::min(width, height));
@@ -2053,6 +2071,7 @@ void GpuRenderer::drawOverlay(
     const auto knob = normalized(knobColor);
     const auto button = normalized(buttonColor);
     const auto ssrButton = normalized(ssrEnabled ? buttonColor : ssrDisabledButtonColor);
+    const auto debugButton = normalized(ssrDebugView == 0 ? ssrDisabledButtonColor : buttonColor);
     const auto text = normalized(textColor);
 
     drawOverlayCircle(commandBuffer, pass, joystickX, joystickY,
@@ -2100,6 +2119,13 @@ void GpuRenderer::drawOverlay(
 
     const float buttonX = static_cast<float>(width) - backendButtonRight - backendButtonWidth;
     const float ssrButtonX = static_cast<float>(width) - ssrButtonRight - ssrButtonWidth;
+    const float debugButtonX = static_cast<float>(width) - ssrDebugButtonRight - ssrDebugButtonWidth;
+    drawOverlayRect(commandBuffer, pass, debugButtonX, backendButtonY,
+                    ssrDebugButtonWidth, backendButtonHeight, width, height, debugButton.data());
+    drawOverlayText(commandBuffer, pass, debugButtonX + 17.0F,
+                    backendButtonY + (backendButtonHeight - fontHeight) * 0.5F,
+                    "DBG", width, height, text.data());
+
     drawOverlayRect(commandBuffer, pass, ssrButtonX, backendButtonY,
                     ssrButtonWidth, backendButtonHeight, width, height, ssrButton.data());
     drawOverlayText(commandBuffer, pass, ssrButtonX + 18.0F,
