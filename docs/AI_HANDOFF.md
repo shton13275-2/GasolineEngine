@@ -870,3 +870,10 @@ GPU shadow target format fallback — 2026-11-03
 - The DBG touch button immediately left of SSR cycles modes on iPhone. Desktop V cycles the same modes. The SSR ON/OFF control remains independent.
 - The new debug UI/code changes were committed in subsequent commits on ios/initial-support. Verify the latest branch HEAD and matching CI before distributing an IPA.
 - This does not yet prove the reflection artifact is fixed. Use the debug views on a fresh iPhone build to determine whether depth, floor reconstruction, ray hits, or sampled hit UVs are spatially incorrect. Keep CPU renderer unchanged.
+
+### Discord commit notifications — 2026-11-04
+
+- Updated `.github/workflows/build.yml` on `ios/initial-support`: the existing Discord detailed build-report job now runs for every `push` event, regardless of whether the iOS build succeeds. It still waits for the Windows and iOS jobs so the message can include their results.
+- Pull-request and manual workflow runs no longer trigger this Discord report.
+- The workflow uses the repository Actions secret `DISCORD_WEBHOOK_URL`. If that secret is absent, the notification step emits a warning and skips sending; no webhook URL is stored in the repository.
+- This change configures push-triggered notification; actual Discord delivery must be verified by a subsequent push with the secret configured.
