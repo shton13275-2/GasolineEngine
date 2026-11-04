@@ -351,7 +351,7 @@ fragment float4 bloom_fragment(
     // Reconstruct a world-space position from the camera depth prepass.
     // Neighbor positions provide a screen-space normal estimate without
     // requiring a second normal-buffer render target.
-    if (centerDepth < 0.999) {
+    if (constants.depthFlags.y > 0.5 && centerDepth < 0.999) {
         const float3 worldPosition = reconstructWorldPosition(uv, centerDepth, constants);
 
         // The current demo has one known reflective surface: the horizontal
@@ -497,8 +497,7 @@ fragment float4 bloom_fragment(
 )metal";
 
 constexpr char overlayVertexSource[] = R"metal(
-#include <metal_stdlib>
-using namespace metal;
+#include <metal_stdlib>using namespace metal;
 
 struct OverlayConstants {
     float2 center;
@@ -997,7 +996,6 @@ bool GpuRenderer::initialize(SDL_Window* window, const std::vector<const Mesh*>&
         shutdown();
         return false;
     }
-
     const SDL_GPUTextureFormat swapchainFormat = SDL_GetGPUSwapchainTextureFormat(device_, window_);
     sceneColorFormat_ = SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT;
     const SDL_GPUTextureUsageFlags hdrUsage =
@@ -1497,8 +1495,7 @@ bool GpuRenderer::createDepthTexture(Uint32 width, Uint32 height) {
     sceneColorInfo.width = width;
     sceneColorInfo.height = height;
     sceneColorInfo.layer_count_or_depth = 1;
-    sceneColorInfo.num_levels = 1;
-    sceneColorInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
+    sceneColorInfo.num_levels = 1;    sceneColorInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
     if (!SDL_GPUTextureSupportsFormat(device_, sceneColorInfo.format,
             SDL_GPU_TEXTURETYPE_2D, sceneColorInfo.usage)) {
         SDL_ReleaseGPUTexture(device_, depthTexture_);
@@ -1578,7 +1575,7 @@ bool GpuRenderer::createDepthTexture(Uint32 width, Uint32 height) {
 bool GpuRenderer::renderFrame(
     const Camera& camera, const std::vector<SceneRenderItem>& renderItems,
     bool showTouchControls, bool movementActive, float movementX, float movementY,
-    float framesPerSecond, bool wireframe) {
+    float framesPerSecond, bool wireframe, bool ssrEnabled) {
     if (device_ == nullptr || window_ == nullptr || pipeline_ == nullptr ||
         wireframePipeline_ == nullptr || bloomPipeline_ == nullptr ||
         bloomSampler_ == nullptr ||
@@ -1803,12 +1800,13 @@ bool GpuRenderer::renderFrame(
     compositeConstants.cameraPosition[2] = camera.z();
     compositeConstants.cameraPosition[3] = 1.0F;
     compositeConstants.depthFlags[0] = shadowDepthPacked_ ? 1.0F : 0.0F;
+    compositeConstants.depthFlags[1] = ssrEnabled ? 1.0F : 0.0F;
     SDL_PushGPUFragmentUniformData(commandBuffer, 0, &compositeConstants,
         static_cast<Uint32>(sizeof(compositeConstants)));
     SDL_DrawGPUPrimitives(compositePass, 3, 1, 0, 0);
     if (showTouchControls && overlayPipeline_ != nullptr) {
         drawOverlay(commandBuffer, compositePass, width, height, movementActive, movementX, movementY,
-                    framesPerSecond);
+                    framesPerSecond, ssrEnabled);
     }
     SDL_EndGPURenderPass(compositePass);
 
@@ -1882,7 +1880,7 @@ void GpuRenderer::drawOverlayText(
 void GpuRenderer::drawOverlay(
     SDL_GPUCommandBuffer* commandBuffer, SDL_GPURenderPass* pass,
     Uint32 width, Uint32 height, bool movementActive, float movementX, float movementY,
-    float framesPerSecond) {
+    float framesPerSecond, bool ssrEnabled) {
     SDL_BindGPUGraphicsPipeline(pass, overlayPipeline_);
     using namespace touch_overlay;
     const float dimension = static_cast<float>(std::min(width, height));
@@ -1896,6 +1894,7 @@ void GpuRenderer::drawOverlay(
     const auto guide = normalized(guideColor);
     const auto knob = normalized(knobColor);
     const auto button = normalized(buttonColor);
+    const auto ssrButton = normalized(ssrEnabled ? buttonColor : ssrDisabledButtonColor);
     const auto text = normalized(textColor);
 
     drawOverlayCircle(commandBuffer, pass, joystickX, joystickY,
@@ -1942,6 +1941,13 @@ void GpuRenderer::drawOverlay(
     drawOverlayText(commandBuffer, pass, fpsX, fpsY, fpsText, width, height, text.data());
 
     const float buttonX = static_cast<float>(width) - backendButtonRight - backendButtonWidth;
+    const float ssrButtonX = static_cast<float>(width) - ssrButtonRight - ssrButtonWidth;
+    drawOverlayRect(commandBuffer, pass, ssrButtonX, backendButtonY,
+                    ssrButtonWidth, backendButtonHeight, width, height, ssrButton.data());
+    drawOverlayText(commandBuffer, pass, ssrButtonX + 18.0F,
+                    backendButtonY + (backendButtonHeight - fontHeight) * 0.5F,
+                    "SSR", width, height, text.data());
+
     drawOverlayRect(commandBuffer, pass, buttonX, backendButtonY,
                     backendButtonWidth, backendButtonHeight, width, height, button.data());
     drawOverlayText(commandBuffer, pass, buttonX + 33.0F,
@@ -1997,8 +2003,7 @@ void GpuRenderer::shutdown() noexcept {
         }
         if (pipeline_ != nullptr) {
             SDL_ReleaseGPUGraphicsPipeline(device_, pipeline_);
-            pipeline_ = nullptr;
-        }
+            pipeline_ = nullptr;        }
         if (vertexBuffer_ != nullptr) {
             SDL_ReleaseGPUBuffer(device_, vertexBuffer_);
             vertexBuffer_ = nullptr;
