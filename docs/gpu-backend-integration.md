@@ -138,3 +138,11 @@ This first diagnostic version records CPU-visible renderer state only. It does *
 - This adds an extra full-resolution RGBA8 render target and periodic GPU-to-CPU transfer. It is asynchronous and not performed every frame, but its memory/bandwidth cost and Metal runtime compatibility still need physical-device verification. The 8-bit normalized step channel is quantized; these are classification counters derived from the per-pixel image, not GPU atomic counters.
 - If diagnostics texture creation/readback fails, the renderer records the diagnostic error where possible; the current texture-allocation path reports initialization/frame failure rather than silently pretending counters exist.
 - CI MSL compilation and IPA packaging do not establish the correctness of the readback or the SSR image on an iPhone.
+
+
+## SSR diagnostic log analysis and receiver-only tracing — 2026-11-04
+
+- The iPhone diagnostic log confirmed that SSR toggling controls the composite path: with SSR off, reflective receiver, ray-march, and hit counts were all zero; with SSR on, the depth prepass and SSR diagnostics were active while the reported frame rate remained around 60 FPS.
+- Across the submitted SSR-on samples, ray_march_pixels exactly matched depth_valid_pixels. Source inspection found why: the shader reconstructed every valid depth pixel and ran the ray loop even when the pixel's floor receiver mask was zero. The final reflection weight hid non-floor contributions, but those unnecessary traces polluted hit counters and wasted GPU work.
+- Updated the shader to enter the ray-march path only when surfaceMask > 0.001. The aggregate ray-march and hit counters now describe floor receiver candidates rather than all visible geometry.
+- This correction removes unnecessary traces and makes the diagnostics semantically useful. It is not a confirmed fix for the repeated/combed reflection artifact. A new IPA and fresh iPhone log/image are still required; the previous log was generated before this correction.
