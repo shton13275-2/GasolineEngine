@@ -106,3 +106,12 @@ Keyboard input **G** requests a backend switch. The touch interface also has a t
 ## Embedded Metal source compilation in CI
 
 The iOS job extracts the eight raw MSL strings embedded in `src/engine/GpuRenderer.cpp` with `scripts/extract_msl_shaders.py`, compiles each source to Metal IR with `xcrun -sdk iphoneos metal -c`, and links the outputs into a temporary `.metallib`. The application continues to pass embedded MSL strings to SDL_GPU at runtime; the temporary library is only a CI validation artifact and is not bundled into the IPA. Apple's command-line workflow for compiling MSL to IR and linking a Metal library is documented in [Building a shader library by precompiling source files](https://developer.apple.com/documentation/metal/building-a-shader-library-by-precompiling-source-files). This CI step validates shader source compilation, not runtime pipeline creation, device-specific format support, or the rendered result.
+
+
+## SSR runtime isolation toggle
+
+- `GpuRenderer::renderFrame` accepts an `ssrEnabled` flag (defaulting to enabled for existing callers). The value is passed through `CompositeConstants.depthFlags.y`.
+- When the flag is disabled, the fullscreen MSL composite skips the SSR receiver reconstruction and ray-march. SSAO still uses the same camera-depth prepass, and bloom/tone mapping still run.
+- In GPU mode, the overlay presents an `SSR` button immediately left of the CPU backend switch. A tap toggles the flag; the button uses the normal blue color when enabled and a muted color when disabled. The main loop also maps keyboard **T** to the same toggle.
+- `touch_overlay_hit_test` covers the SSR button center, exclusive right edge, separation from the backend button, and portrait layout.
+- Use the toggle to compare the exact same camera/scene with SSR on and off. If the repeated floor pattern disappears only when SSR is off, that isolates the artifact to the SSR contribution; it does not by itself identify the faulty SSR sub-operation. This comparison still requires a new IPA and physical iPhone test.
