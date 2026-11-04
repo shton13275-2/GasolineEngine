@@ -330,7 +330,12 @@ float3 reconstructWorldPosition(float2 uv, float depth, constant CompositeConsta
     return world.xyz / max(abs(world.w), 0.00001) * (world.w < 0.0 ? -1.0 : 1.0);
 }
 
-fragment float4 bloom_fragment(
+struct BloomFragmentOutput {
+    float4 color [[color(0)]];
+    float4 diagnostics [[color(1)]];
+};
+
+fragment BloomFragmentOutput bloom_fragment(
     BloomVertexOutput input [[stage_in]],
     texture2d<float> sceneTexture [[texture(0)]],
     sampler sceneSampler [[sampler(0)]],
@@ -347,6 +352,9 @@ fragment float4 bloom_fragment(
     float3 base = sceneTexture.sample(sceneSampler, uv).rgb;
     float3 reflectionColor = float3(0.0);
     float reflectionWeight = 0.0;
+    float diagnosticReceiverMask = 0.0;
+    float diagnosticRayMarchSteps = 0.0;
+    float diagnosticRayHit = 0.0;
 
     // Reconstruct a world-space position from the camera depth prepass.
     // Neighbor positions provide a screen-space normal estimate without
@@ -360,6 +368,7 @@ fragment float4 bloom_fragment(
         // top/bottom faces and pyramid facets as reflective too.
         const float floorDistance = abs(worldPosition.y + 1.5);
         const float surfaceMask = 1.0 - smoothstep(0.025, 0.09, floorDistance);
+        diagnosticReceiverMask = surfaceMask;
         const float3 normal = float3(0.0, 1.0, 0.0);
         const float3 viewDirection = normalize(constants.cameraPosition.xyz - worldPosition);
         const float3 incident = -viewDirection;
@@ -380,6 +389,7 @@ fragment float4 bloom_fragment(
         // thin projected parts of the cube. The previous 0.075 world-unit
         // spacing produced visibly discontinuous, comb-like reflection bands.
         for (uint step = 1; step <= 64; ++step) {
+            diagnosticRayMarchSteps = float(step);
             const float distanceAlongRay = 0.12 + 0.035 * float(step - 1);
             const float3 samplePosition = rayOrigin + reflectedDirection * distanceAlongRay;
             const float4 clip = constants.viewProjection * float4(samplePosition, 1.0);
@@ -441,6 +451,7 @@ fragment float4 bloom_fragment(
         }
 
         if (hitFound) {
+            diagnosticRayHit = 1.0;
             reflectionColor = sceneTexture.sample(sceneSampler, hitUV).rgb;
             const float distanceFade = 1.0 - clamp(hitDistance / 3.0, 0.0, 1.0);
             reflectionWeight = surfaceMask * screenFade *
@@ -492,7 +503,14 @@ fragment float4 bloom_fragment(
     const float3 numerator = hdrColor * (2.51 * hdrColor + 0.03);
     const float3 denominator = hdrColor * (2.43 * hdrColor + 0.59) + 0.14;
     const float3 mapped = clamp(numerator / max(denominator, 0.0001), 0.0, 1.0);
-    return float4(mapped, 1.0);
+    BloomFragmentOutput output;
+    output.color = float4(mapped, 1.0);
+    output.diagnostics = float4(
+        centerDepth < 0.999 ? 1.0 : 0.0,
+        diagnosticReceiverMask,
+        diagnosticRayMarchSteps / 64.0,
+        diagnosticRayHit);
+    return output;
 }
 )metal";
 
@@ -996,6 +1014,12 @@ bool GpuRenderer::initialize(SDL_Window* window, const std::vector<const Mesh*>&
         shutdown();
         return false;
     }
+    if (!SDL_GPUTextureSupportsFormat(device_, SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
+            SDL_GPU_TEXTURETYPE_2D, SDL_GPU_TEXTUREUSAGE_COLOR_TARGET)) {
+        lastError_ = "GPU device does not support the RGBA8 SSR diagnostics target";
+        shutdown();
+        return false;
+    }
     const SDL_GPUTextureFormat swapchainFormat = SDL_GetGPUSwapchainTextureFormat(device_, window_);
     sceneColorFormat_ = SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT;    const SDL_GPUTextureUsageFlags hdrUsage =
         SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
@@ -1278,15 +1302,18 @@ bool GpuRenderer::initialize(SDL_Window* window, const std::vector<const Mesh*>&
         return false;
     }
 
-    SDL_GPUColorTargetDescription overlayColorTarget{};
-    overlayColorTarget.format = SDL_GetGPUSwapchainTextureFormat(device_, window_);
-    overlayColorTarget.blend_state.enable_blend = true;
-    overlayColorTarget.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
-    overlayColorTarget.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
-    overlayColorTarget.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
-    overlayColorTarget.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
-    overlayColorTarget.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
-    overlayColorTarget.blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+    SDL_GPUColorTargetDescription overlayColorTargets[2]{};
+    overlayColorTargets[0].format = SDL_GetGPUSwapchainTextureFormat(device_, window_);
+    overlayColorTargets[0].blend_state.enable_blend = true;
+    overlayColorTargets[0].blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+    overlayColorTargets[0].blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    overlayColorTargets[0].blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
+    overlayColorTargets[0].blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+    overlayColorTargets[0].blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    overlayColorTargets[0].blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+    overlayColorTargets[1].format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    overlayColorTargets[1].blend_state.enable_color_write_mask = true;
+    overlayColorTargets[1].blend_state.color_write_mask = 0;
     SDL_GPUGraphicsPipelineCreateInfo overlayPipelineInfo{};
     overlayPipelineInfo.vertex_shader = overlayVertexShader;
     overlayPipelineInfo.fragment_shader = overlayFragmentShader;
@@ -1297,8 +1324,8 @@ bool GpuRenderer::initialize(SDL_Window* window, const std::vector<const Mesh*>&
     overlayPipelineInfo.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_1;
     overlayPipelineInfo.depth_stencil_state.enable_depth_test = false;
     overlayPipelineInfo.depth_stencil_state.enable_depth_write = false;
-    overlayPipelineInfo.target_info.color_target_descriptions = &overlayColorTarget;
-    overlayPipelineInfo.target_info.num_color_targets = 1;
+    overlayPipelineInfo.target_info.color_target_descriptions = overlayColorTargets;
+    overlayPipelineInfo.target_info.num_color_targets = 2;
     overlayPipelineInfo.target_info.has_depth_stencil_target = false;
     overlayPipeline_ = SDL_CreateGPUGraphicsPipeline(device_, &overlayPipelineInfo);
     SDL_ReleaseGPUShader(device_, overlayFragmentShader);
@@ -1337,8 +1364,9 @@ bool GpuRenderer::initialize(SDL_Window* window, const std::vector<const Mesh*>&
         return false;
     }
 
-    SDL_GPUColorTargetDescription bloomColorTarget{};
-    bloomColorTarget.format = SDL_GetGPUSwapchainTextureFormat(device_, window_);
+    SDL_GPUColorTargetDescription bloomColorTargets[2]{};
+    bloomColorTargets[0].format = SDL_GetGPUSwapchainTextureFormat(device_, window_);
+    bloomColorTargets[1].format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
     SDL_GPUGraphicsPipelineCreateInfo bloomPipelineInfo{};
     bloomPipelineInfo.vertex_shader = bloomVertexShader;
     bloomPipelineInfo.fragment_shader = bloomFragmentShader;
@@ -1349,8 +1377,8 @@ bool GpuRenderer::initialize(SDL_Window* window, const std::vector<const Mesh*>&
     bloomPipelineInfo.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_1;
     bloomPipelineInfo.depth_stencil_state.enable_depth_test = false;
     bloomPipelineInfo.depth_stencil_state.enable_depth_write = false;
-    bloomPipelineInfo.target_info.color_target_descriptions = &bloomColorTarget;
-    bloomPipelineInfo.target_info.num_color_targets = 1;
+    bloomPipelineInfo.target_info.color_target_descriptions = bloomColorTargets;
+    bloomPipelineInfo.target_info.num_color_targets = 2;
     bloomPipeline_ = SDL_CreateGPUGraphicsPipeline(device_, &bloomPipelineInfo);
     SDL_ReleaseGPUShader(device_, bloomFragmentShader);
     SDL_ReleaseGPUShader(device_, bloomVertexShader);
@@ -1445,9 +1473,27 @@ bool GpuRenderer::createShadowMap() {
 
 bool GpuRenderer::createDepthTexture(Uint32 width, Uint32 height) {
     if (depthTexture_ != nullptr && sceneColorTexture_ != nullptr &&
+        ssrDiagnosticsTexture_ != nullptr && ssrDiagnosticsTransferBuffer_ != nullptr &&
         depthWidth_ == width && depthHeight_ == height &&
         (sampleCount_ == SDL_GPU_SAMPLECOUNT_1 || multisampleColorTexture_ != nullptr)) {
         return true;
+    }
+    if (ssrDiagnosticsFence_ != nullptr) {
+        SDL_GPUFence* pendingFence = ssrDiagnosticsFence_;
+        if (SDL_WaitForGPUFences(device_, true, &pendingFence, 1)) {
+            processSsrDiagnosticsReadback();
+        } else {
+            SDL_ReleaseGPUFence(device_, ssrDiagnosticsFence_);
+            ssrDiagnosticsFence_ = nullptr;
+        }
+    }
+    if (ssrDiagnosticsTexture_ != nullptr) {
+        SDL_ReleaseGPUTexture(device_, ssrDiagnosticsTexture_);
+        ssrDiagnosticsTexture_ = nullptr;
+    }
+    if (ssrDiagnosticsTransferBuffer_ != nullptr) {
+        SDL_ReleaseGPUTransferBuffer(device_, ssrDiagnosticsTransferBuffer_);
+        ssrDiagnosticsTransferBuffer_ = nullptr;
     }
     if (depthTexture_ != nullptr) {
         SDL_ReleaseGPUTexture(device_, depthTexture_);
@@ -1543,6 +1589,39 @@ bool GpuRenderer::createDepthTexture(Uint32 width, Uint32 height) {
         return false;
     }
 
+    const std::uint64_t diagnosticByteCount =
+        static_cast<std::uint64_t>(width) * static_cast<std::uint64_t>(height) * 4U;
+    if (diagnosticByteCount == 0 ||
+        diagnosticByteCount > std::numeric_limits<Uint32>::max()) {
+        lastError_ = "SSR diagnostics readback exceeds SDL_GPU transfer-buffer limits";
+        return false;
+    }
+    SDL_GPUTextureCreateInfo diagnosticsInfo{};
+    diagnosticsInfo.type = SDL_GPU_TEXTURETYPE_2D;
+    diagnosticsInfo.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    diagnosticsInfo.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET;
+    diagnosticsInfo.width = width;
+    diagnosticsInfo.height = height;
+    diagnosticsInfo.layer_count_or_depth = 1;
+    diagnosticsInfo.num_levels = 1;
+    diagnosticsInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
+    ssrDiagnosticsTexture_ = SDL_CreateGPUTexture(device_, &diagnosticsInfo);
+    if (ssrDiagnosticsTexture_ == nullptr) {
+        setError("SDL_CreateGPUTexture(SSR diagnostics)");
+        return false;
+    }
+    SDL_GPUTransferBufferCreateInfo diagnosticsTransferInfo{};
+    diagnosticsTransferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_DOWNLOAD;
+    diagnosticsTransferInfo.size = static_cast<Uint32>(diagnosticByteCount);
+    ssrDiagnosticsTransferBuffer_ =
+        SDL_CreateGPUTransferBuffer(device_, &diagnosticsTransferInfo);
+    if (ssrDiagnosticsTransferBuffer_ == nullptr) {
+        setError("SDL_CreateGPUTransferBuffer(SSR diagnostics)");
+        return false;
+    }
+    ssrDiagnosticsWidth_ = width;
+    ssrDiagnosticsHeight_ = height;
+
     if (sampleCount_ != SDL_GPU_SAMPLECOUNT_1) {
         SDL_GPUTextureCreateInfo colorInfo{};
         colorInfo.type = SDL_GPU_TEXTURETYPE_2D;
@@ -1570,10 +1649,51 @@ bool GpuRenderer::createDepthTexture(Uint32 width, Uint32 height) {
     return true;
 }
 
+void GpuRenderer::processSsrDiagnosticsReadback() {
+    if (device_ == nullptr || ssrDiagnosticsFence_ == nullptr ||
+        !SDL_QueryGPUFence(device_, ssrDiagnosticsFence_)) {
+        return;
+    }
+
+    void* mapped = SDL_MapGPUTransferBuffer(device_, ssrDiagnosticsTransferBuffer_, false);
+    if (mapped != nullptr) {
+        const auto* pixels = static_cast<const Uint8*>(mapped);
+        SsrGpuDiagnostics result{};
+        result.sampleSerial = ssrGpuDiagnostics_.sampleSerial + 1U;
+        result.totalPixels = static_cast<std::uint64_t>(ssrDiagnosticsWidth_) *
+                             static_cast<std::uint64_t>(ssrDiagnosticsHeight_);
+        for (std::uint64_t index = 0; index < result.totalPixels; ++index) {
+            const Uint8* pixel = pixels + index * 4U;
+            if (pixel[0] >= 128U) ++result.depthValidPixels;
+            if (pixel[1] >= 128U) ++result.reflectivePixels;
+            if (pixel[3] >= 128U) ++result.rayHitPixels;
+            const auto steps = static_cast<std::uint64_t>(
+                (static_cast<unsigned int>(pixel[2]) * 64U + 127U) / 255U);
+            if (steps > 0U) {
+                ++result.rayMarchPixels;
+                result.rayMarchSteps += steps;
+            }
+        }
+        result.averageRayMarchSteps = result.rayMarchPixels > 0U
+            ? static_cast<float>(result.rayMarchSteps) /
+              static_cast<float>(result.rayMarchPixels)
+            : 0.0F;
+        ssrGpuDiagnostics_ = result;
+        SDL_UnmapGPUTransferBuffer(device_, ssrDiagnosticsTransferBuffer_);
+    } else {
+        ssrDiagnosticsError_ = std::string("SDL_MapGPUTransferBuffer(SSR diagnostics) failed: ") +
+                               SDL_GetError();
+    }
+
+    SDL_ReleaseGPUFence(device_, ssrDiagnosticsFence_);
+    ssrDiagnosticsFence_ = nullptr;
+}
+
 bool GpuRenderer::renderFrame(
     const Camera& camera, const std::vector<SceneRenderItem>& renderItems,
     bool showTouchControls, bool movementActive, float movementX, float movementY,
     float framesPerSecond, bool wireframe, bool ssrEnabled) {
+    processSsrDiagnosticsReadback();
     if (device_ == nullptr || window_ == nullptr || pipeline_ == nullptr ||
         wireframePipeline_ == nullptr || bloomPipeline_ == nullptr ||
         bloomSampler_ == nullptr ||
@@ -1773,13 +1893,17 @@ bool GpuRenderer::renderFrame(
 
     SDL_EndGPURenderPass(pass);
 
-    SDL_GPUColorTargetInfo compositeTarget{};
-    compositeTarget.texture = swapchainTexture;
-    compositeTarget.clear_color = SDL_FColor{0.02F, 0.11F, 0.19F, 1.0F};
-    compositeTarget.load_op = SDL_GPU_LOADOP_CLEAR;
-    compositeTarget.store_op = SDL_GPU_STOREOP_STORE;
+    SDL_GPUColorTargetInfo compositeTargets[2]{};
+    compositeTargets[0].texture = swapchainTexture;
+    compositeTargets[0].clear_color = SDL_FColor{0.02F, 0.11F, 0.19F, 1.0F};
+    compositeTargets[0].load_op = SDL_GPU_LOADOP_CLEAR;
+    compositeTargets[0].store_op = SDL_GPU_STOREOP_STORE;
+    compositeTargets[1].texture = ssrDiagnosticsTexture_;
+    compositeTargets[1].clear_color = SDL_FColor{0.0F, 0.0F, 0.0F, 0.0F};
+    compositeTargets[1].load_op = SDL_GPU_LOADOP_CLEAR;
+    compositeTargets[1].store_op = SDL_GPU_STOREOP_STORE;
     SDL_GPURenderPass* compositePass = SDL_BeginGPURenderPass(
-        commandBuffer, &compositeTarget, 1, nullptr);
+        commandBuffer, compositeTargets, 2, nullptr);
     if (compositePass == nullptr) {
         setError("SDL_BeginGPURenderPass(bloom composite)");
         (void)SDL_SubmitGPUCommandBuffer(commandBuffer);
@@ -1807,6 +1931,37 @@ bool GpuRenderer::renderFrame(
                     framesPerSecond, ssrEnabled);
     }
     SDL_EndGPURenderPass(compositePass);
+
+    const Uint64 diagnosticTicks = SDL_GetTicks();
+    const bool requestDiagnostics =
+        ssrDiagnosticsFence_ == nullptr &&
+        diagnosticTicks - lastSsrDiagnosticsReadbackTicks_ >= 1000U;
+    if (requestDiagnostics) {
+        SDL_GPUCopyPass* diagnosticsCopyPass = SDL_BeginGPUCopyPass(commandBuffer);
+        if (diagnosticsCopyPass != nullptr) {
+            SDL_GPUTextureRegion sourceRegion{};
+            sourceRegion.texture = ssrDiagnosticsTexture_;
+            sourceRegion.w = ssrDiagnosticsWidth_;
+            sourceRegion.h = ssrDiagnosticsHeight_;
+            sourceRegion.d = 1;
+            SDL_GPUTextureTransferInfo destinationInfo{};
+            destinationInfo.transfer_buffer = ssrDiagnosticsTransferBuffer_;
+            destinationInfo.pixels_per_row = ssrDiagnosticsWidth_;
+            destinationInfo.rows_per_layer = ssrDiagnosticsHeight_;
+            SDL_DownloadFromGPUTexture(diagnosticsCopyPass, &sourceRegion, &destinationInfo);
+            SDL_EndGPUCopyPass(diagnosticsCopyPass);
+            ssrDiagnosticsFence_ =
+                SDL_SubmitGPUCommandBufferAndAcquireFence(commandBuffer);
+            if (ssrDiagnosticsFence_ == nullptr) {
+                setError("SDL_SubmitGPUCommandBufferAndAcquireFence(SSR diagnostics)");
+                return false;
+            }
+            lastSsrDiagnosticsReadbackTicks_ = diagnosticTicks;
+            return true;
+        }
+        ssrDiagnosticsError_ = std::string("SDL_BeginGPUCopyPass(SSR diagnostics) failed: ") +
+                               SDL_GetError();
+    }
 
     if (!SDL_SubmitGPUCommandBuffer(commandBuffer)) {
         setError("SDL_SubmitGPUCommandBuffer");
@@ -1955,6 +2110,22 @@ void GpuRenderer::drawOverlay(
 
 void GpuRenderer::shutdown() noexcept {
     if (device_ != nullptr) {
+        if (ssrDiagnosticsFence_ != nullptr) {
+            SDL_GPUFence* pendingFence = ssrDiagnosticsFence_;
+            (void)SDL_WaitForGPUFences(device_, true, &pendingFence, 1);
+            SDL_ReleaseGPUFence(device_, ssrDiagnosticsFence_);
+            ssrDiagnosticsFence_ = nullptr;
+        }
+        if (ssrDiagnosticsTransferBuffer_ != nullptr) {
+            SDL_ReleaseGPUTransferBuffer(device_, ssrDiagnosticsTransferBuffer_);
+            ssrDiagnosticsTransferBuffer_ = nullptr;
+        }
+        if (ssrDiagnosticsTexture_ != nullptr) {
+            SDL_ReleaseGPUTexture(device_, ssrDiagnosticsTexture_);
+            ssrDiagnosticsTexture_ = nullptr;
+        }
+        ssrDiagnosticsWidth_ = 0;
+        ssrDiagnosticsHeight_ = 0;
         if(shadowSampler_){SDL_ReleaseGPUSampler(device_,shadowSampler_);shadowSampler_=nullptr;}
         if(ssaoDepthTexture_){SDL_ReleaseGPUTexture(device_,ssaoDepthTexture_);ssaoDepthTexture_=nullptr;}
         if(ssaoDepthAttachmentTexture_){SDL_ReleaseGPUTexture(device_,ssaoDepthAttachmentTexture_);ssaoDepthAttachmentTexture_=nullptr;}
@@ -2022,6 +2193,9 @@ void GpuRenderer::shutdown() noexcept {
     shadowMappingEnabled_ = false;
     shadowDepthPacked_ = false;
     shadowColorFormat_ = SDL_GPU_TEXTUREFORMAT_INVALID;
+    ssrDiagnosticsWidth_ = 0;
+    ssrDiagnosticsHeight_ = 0;
+    ssrDiagnosticsError_.clear();
     meshRanges_.clear();
 }
 
