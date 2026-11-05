@@ -242,7 +242,6 @@ fragment float4 main_fragment(
         : (floorSurface ? albedo * 0.035 : float3(0.0));
     const float ambientStrength = floorSurface ? 0.16 : (emissiveSurface ? 0.08 : 0.12);
     const float3 ambient = albedo * ambientStrength * (1.0 - metallic);
-    const float3 lighting = ambient + directionalContribution + pointContribution + emission;
 
     return float4(ambient + directionalContribution + pointContribution + emission, 1.0);
 }

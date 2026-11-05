@@ -421,7 +421,8 @@ CI:
 - CIでのビルドとiPhone実機での視覚的な一致は、コミット後に別途確認する。
 
 - 2026-10-31: `ios/initial-support` のソース、README、CMake、workflow、GPU実装を確認して初版作成。GPU三角形プレビュー、iOS unsigned IPA workflow、CPU software renderer、iOSタッチ操作の状態を整理。
-- 2026-10-31: iOS buildのSDL3 source cache、Xcode versionを含むcache key、`FETCHCONTENT_UPDATES_DISCONNECTED`、`.app`自動検出を追記。Windows/iOS両jobで`docs/`をsparse checkout対象外にした設定を追記。\n- 2026-10-31: Actionsの失敗runを調査。Xcode version出力が複数行のため`$GITHUB_OUTPUT`で不正形式になっていた問題、およびCMake経由の`xcodebuild`に`-derivedDataPath`を渡してscheme要求エラーになっていた問題を確認。workflowを修正し、Xcode versionを1行化、DerivedData cache/引数を一旦除去してSDL3 source cacheのみ残した。修正後CIの結果は未確認。
+- 2026-10-31: iOS buildのSDL3 source cache、Xcode versionを含むcache key、`FETCHCONTENT_UPDATES_DISCONNECTED`、`.app`自動検出を追記。Windows/iOS両jobで`docs/`をsparse checkout対象外にした設定を追記。
+- 2026-10-31: Actionsの失敗runを調査。Xcode version出力が複数行のため`$GITHUB_OUTPUT`で不正形式になっていた問題、およびCMake経由の`xcodebuild`に`-derivedDataPath`を渡してscheme要求エラーになっていた問題を確認。workflowを修正し、Xcode versionを1行化、DerivedData cache/引数を一旦除去してSDL3 source cacheのみ残した。修正後CIの結果は未確認。
 
 
 ## GPU renderer extraction — 2026-10-31
@@ -842,7 +843,7 @@ GPU shadow target format fallback — 2026-11-03
 
 - Added an `ssr.log` file beside `startup.log` using the same SDL `SDL_GetPrefPath("com.gasolineengine", "GasolineEngine")` directory, including on iOS. This is a writable app preference directory, not the bundled app resources directory.
 - The file is truncated/recreated at launch. SSR ON/OFF transitions are logged immediately. While GPU rendering succeeds, at most one state record per second is written with SSR state, pixel resolution, smoothed FPS, camera coordinates, and GPU driver. GPU frame errors are recorded.
-- This is a first-stage CPU-side diagnostic log. It does not contain shader-internal depth-valid-pixel counts, ray-march counts, hit/miss counts, or reflection weights. Those values require GPU-side counters and an explicit readback path, which are not part of this change.
+- This entry records the initial CPU-side logging implementation only. It was superseded by the later SSR GPU diagnostic readback change below: the current renderer writes a second RGBA8 color target, asynchronously downloads it with a GPU fence about once per second, and appends aggregate depth-valid, reflective-receiver, ray-march-step, and hit-pixel counts to `ssr.log`. These are image-derived and quantized aggregates, not fragment-stage atomic counters; see the later section for the exact channels and limitations.
 - iOS IPA build and physical iPhone file access still need verification. The exact visible location can be retrieved from the app's SDL preference directory; it is not a folder inside the installed app bundle.
 
 
@@ -877,3 +878,12 @@ GPU shadow target format fallback — 2026-11-03
 - Pull-request and manual workflow runs no longer trigger this Discord report.
 - The workflow uses the repository Actions secret `DISCORD_WEBHOOK_URL`. If that secret is absent, the notification step emits a warning and skips sending; no webhook URL is stored in the repository.
 - This change configures push-triggered notification; actual Discord delivery must be verified by a subsequent push with the secret configured.
+
+
+## Documentation and Metal warning cleanup — 2026-11-05
+
+- Corrected stale SSR log descriptions in the README, AI handoff, and GPU integration notes. The current implementation uses an RGBA8 diagnostic target and asynchronous GPU-fence readback; the counts are image-derived classifications, not fragment-stage atomic counters.
+- Replaced literal backslash-n escape sequences that had been displayed in the README and AI handoff with actual Markdown line breaks.
+- Removed the unused local `lighting` value from the embedded mesh fragment shader. The returned lighting expression is unchanged; this addresses the unused-variable warning reported by the iOS Metal compiler in Actions run [#434](https://github.com/shton13275-2/GasolineEngine/actions/runs/41832461155).
+- Renamed the Windows workflow step to `Run CTest suite (12 tests)`; the CTest command and test selection are unchanged.
+- These documentation and warning-cleanup changes require their own CI run. They do not claim a new physical-device SSR result.
