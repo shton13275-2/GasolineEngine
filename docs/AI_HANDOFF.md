@@ -173,6 +173,7 @@ GitHubには少なくとも次のブランチが存在する。
 - `CMAKE_OSX_DEPLOYMENT_TARGET=15.0`
 - iOSではSDL_SHARED=OFF、SDL_STATIC=ON。
 - `SDL3::SDL3-static` にリンク。
+- `ORIGINALENGINE_BUILD_APP=OFF` はサンプル実行ファイルだけを無効にする。エンジンライブラリの `Renderer3D` / `GpuRenderer` がSDL3 APIを使うため、SDL3 FetchContentとリンクはライブラリ単体ビルドでも必要。`ORIGINALENGINE_USE_SDL3=OFF` は現在サポートされず、CMake構成時に明示的なエラーにする。
 - App Bundle identifier: `com.gasolineengine.demo`
 - Xcodeの`PRODUCT_BUNDLE_IDENTIFIER`も同じ値に設定し、CIでbuild settingとIPA内`Info.plist`の両方を検証する。
 - Bundle name: `Gasoline Engine`
@@ -184,6 +185,7 @@ GitHubには少なくとも次のブランチが存在する。
 - Windows/MSVC job:
   - Configure CMake
   - Build Release
+  - Configure/build a second Windows directory with `ORIGINALENGINE_BUILD_APP=OFF` and `BUILD_TESTING=OFF`, reusing the already fetched SDL3 source to verify the engine-library-only configuration.
   - `--smoke-test`
   - CTest
   - Windows artifact upload
@@ -195,8 +197,8 @@ GitHubには少なくとも次のブランチが存在する。
   - IPA integrity / bundle contents verify
   - artifact upload
 - 実際のworkflow runとjob結果は作業のたびにGitHub Actionsで確認する。古い成功runを最新変更の成功として扱わない。iOS jobのMSL compile stepは埋め込みshaderのsource compilationを検証するが、Metal runtime pipelineやiPhoneの見た目を検証するものではない。
-- Discord通知は `ios/initial-support` のワークフローだけで送信する。`main` ではDiscord通知jobを実行しない。
-- iOS側のDiscord通知jobはWindowsとiOSの両jobに依存し、iOS unsigned IPA jobが成功した場合にのみ実行する。通知本文にはWindows/iOS両方の結果を含める。Windowsが失敗した場合もiOSが成功すれば結果をまとめて通知する。
+- Discord通知jobは `github.event_name == 'push'` かつ `github.ref == 'refs/heads/ios/initial-support'` の場合だけ実行する。`main`、他のブランチ、Pull Request、手動実行では送信しない。
+- Discord通知jobはWindowsとiOSの両jobに依存し、両方の完了後に実行する。`always()` 条件により、片方または両方のビルドが失敗した場合も各jobの結果を通知する。
 - Discord通知の詳細欄はWindows/iOSのjobだけを含め、Discord通知job自身は除外する。詳細文字列は1,000文字以下に制限し、Embedの各フィールド・説明・総文字数を送信前に検証する。DiscordへのHTTPエラー時はレスポンス本文をActionsログへ出す。Discord通知jobが失敗すると、Windows/iOSのビルドが成功していてもworkflow全体の結論はfailureになるため、個別jobの結果を分けて確認する。
 
 ## 6. ディレクトリと主要ファイル
@@ -887,3 +889,12 @@ GPU shadow target format fallback — 2026-11-03
 - Removed the unused local `lighting` value from the embedded mesh fragment shader. The returned lighting expression is unchanged; this addresses the unused-variable warning reported by the iOS Metal compiler in Actions run [#434](https://github.com/shton13275-2/GasolineEngine/actions/runs/41832461155).
 - Renamed the Windows workflow step to `Run CTest suite (12 tests)`; the CTest command and test selection are unchanged.
 - These documentation and warning-cleanup changes require their own CI run. They do not claim a new physical-device SSR result.
+
+
+## CMake library-only path and Discord branch guard — 2026-11-06
+
+- Fixed the `ORIGINALENGINE_BUILD_APP=OFF` path. The engine library itself includes SDL3-dependent renderer/GPU sources, but SDL3 FetchContent and target linking were previously nested under the sample-app condition. SDL3 setup/linking now occurs whenever `ORIGINALENGINE_USE_SDL3=ON`; the app option controls only creation of `originalengine_app`.
+- `ORIGINALENGINE_USE_SDL3=OFF` now fails at CMake configure with an explicit message because the current engine library is not SDL-independent.
+- Added a Windows workflow configure/build check for the engine library with the sample app and CTest disabled. It reuses the SDL3 source fetched by the normal Windows configure.
+- Restricted Discord notifications to push events on `ios/initial-support`. The job still waits for both Windows and iOS jobs and reports their results even if either build fails; `main`, other branches, pull requests, and manual dispatch do not trigger the notification.
+- The matching Actions run must complete before these new build and notification checks are considered verified. No change is made to the `main` branch.

@@ -70,6 +70,15 @@ The collision module supports static axis-aligned bounding boxes (AABBs). Camera
 - A C++20 compiler
 - Git and internet access during the first configure (SDL3 is downloaded by CMake)
 
+## Build the engine library without the sample app
+
+The `ORIGINALENGINE_BUILD_APP=OFF` option disables only `originalengine_app`. The `originalengine` library still uses SDL3, so CMake continues to fetch and link SDL3. `ORIGINALENGINE_USE_SDL3=OFF` is unsupported by the current engine sources and fails during configuration.
+
+```sh
+cmake -S . -B build-library -DORIGINALENGINE_BUILD_APP=OFF -DBUILD_TESTING=OFF
+cmake --build build-library --config Release
+```
+
 ## iOS support (in progress)
 
 The current GitHub Actions workflow builds an arm64 iOS Device app bundle with the Xcode generator and packages it as an unsigned IPA. It includes the demo OBJ and P3 PPM assets in the app bundle. The deployment target is iOS 15.0. The workflow does not produce an iOS Simulator artifact.
@@ -111,7 +120,7 @@ ctest --test-dir build -C Release --output-on-failure
 
 GitHub Actions can compile the Windows app and run automated tests, but it cannot show the interactive window inside the build log. You need a Windows device to run and visually inspect the executable.
 
-On `ios/initial-support`, the workflow also sends a Discord build report after the iOS unsigned IPA job succeeds. The report includes the Windows and iOS job results, excludes the notification job itself, and keeps embed fields within Discord's message limits. A Discord delivery error can fail the overall workflow even when both build jobs succeed; inspect the individual job results to distinguish build status from notification status.
+On `ios/initial-support`, the workflow sends a Discord build report after both build jobs finish, even if one or both fail. It does not run for `main`, other branches, pull requests, or manual dispatch. The report includes each build job's result, excludes the notification job itself, and keeps embed fields within Discord's message limits. A Discord delivery error can fail the overall workflow even when both build jobs succeed; inspect individual job results to distinguish build status from notification status.
 
 ## Project layout
 
@@ -196,6 +205,15 @@ Gasoline Engine は、C++20 を基盤として開発しているクロスプラ�
 - C++20 対応コンパイラ
 - Git と初回構成時のインターネット接続（CMake が SDL3 をダウンロードします）
 
+## サンプルアプリなしでエンジンライブラリをビルド
+
+`ORIGINALENGINE_BUILD_APP=OFF` はサンプルアプリだけを無効にします。エンジンライブラリ自体が SDL3 を使用するため、SDL3 の取得とリンクは引き続き必要です。現在のソースでは `ORIGINALENGINE_USE_SDL3=OFF` はサポートされず、CMake 構成時にエラーになります。
+
+```sh
+cmake -S . -B build-library -DORIGINALENGINE_BUILD_APP=OFF -DBUILD_TESTING=OFF
+cmake --build build-library --config Release
+```
+
 CPU/GPUの描画対象は `SceneRenderItem` の共通リストで管理します。各項目はメッシュ、シーンオブジェクト、テクスチャパス、GPU mesh index、およびCPU/GPUそれぞれの描画対象フラグを保持し、両レンダラーは同じリストを参照して自身に割り当てられた項目だけを描画します。GPU専用デモキューブはCPU側で重複描画しないようCPU対象フラグを無効にしています。これは描画対象データの共有であり、CPU/GPUの描画APIや機能そのものを統合したものではありません。
 
 ## GPU レンダラー（実験段階）
@@ -222,11 +240,11 @@ ctest --test-dir build -C Release --output-on-failure
 ## GitHub Actions でビルドする（Windows PC が手元になくても可）
 
 1. GitHub リポジトリの **Actions** タブを開きます。
-2. **Build** ワークフローを選び、**Run workflow** を実行するか、`main` ブランチにコミットを push します。
+2. **Build** ワークフローを選び、**Run workflow** を実行するか、`ios/initial-support` ブランチにコミットを push します。
 3. ワークフローの実行が完了したら、成果物 `Gasoline Engine-Windows-x64` をダウンロードします。
 4. ZIP を展開し、対応する Windows PC で `originalengine_app.exe` を実行します。
 
-GitHub Actions は Windows アプリのビルドと自動テストを実行できますが、ビルドログ内に操作可能なゲームウィンドウを表示することはできません。実際の見た目を確認するには、Windows 端末で実行する必要があります。
+GitHub Actions は Windows アプリのビルドと自動テストを実行できますが、ビルドログ内に操作可能なゲームウィンドウを表示することはできません。実際の見た目を確認するには、Windows 端末で実行する必要があります。iOS 開発ブランチでは Windows / iOS の両ビルドが完了した後、成功・失敗の結果を Discord に通知します。この通知は `ios/initial-support` への push のみで実行され、`main` や手動実行、Pull Request では実行されません。
 
 ## ディレクトリ構成
 

@@ -7,7 +7,7 @@ project(GasolineEngine
 )
 
 option(ORIGINALENGINE_BUILD_APP "Build the OriginalEngine sample application" ON)
-option(ORIGINALENGINE_USE_SDL3 "Use SDL3 for the application window and input" ON)
+option(ORIGINALENGINE_USE_SDL3 "Use SDL3 for engine rendering, window, and input integration" ON)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -37,78 +37,81 @@ else()
     target_compile_options(originalengine PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
+if(NOT ORIGINALENGINE_USE_SDL3)
+    message(FATAL_ERROR
+        "The engine library currently requires SDL3. ORIGINALENGINE_USE_SDL3=OFF is not supported.")
+endif()
+
+# SDL3 is a dependency of the engine library itself (Renderer3D and GpuRenderer),
+# not only of the optional sample application.
+include(FetchContent)
+set(SDL_TEST OFF CACHE BOOL "" FORCE)
+set(SDL_EXAMPLES OFF CACHE BOOL "" FORCE)
+if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    # iOS app bundles must not depend on an unbundled SDL dylib.
+    # Build SDL3 as a static library and link it into the executable.
+    set(SDL_SHARED OFF CACHE BOOL "" FORCE)
+    set(SDL_STATIC ON CACHE BOOL "" FORCE)
+endif()
+FetchContent_Declare(
+    SDL3
+    GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
+    GIT_TAG release-3.2.10
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(SDL3)
+if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    target_link_libraries(originalengine PUBLIC SDL3::SDL3-static)
+else()
+    target_link_libraries(originalengine PUBLIC SDL3::SDL3)
+endif()
+
 if(ORIGINALENGINE_BUILD_APP)
-    if(ORIGINALENGINE_USE_SDL3)
-        include(FetchContent)
-        set(SDL_TEST OFF CACHE BOOL "" FORCE)
-        set(SDL_EXAMPLES OFF CACHE BOOL "" FORCE)
-        if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
-            # iOS app bundles must not depend on an unbundled SDL dylib.
-            # Build SDL3 as a static library and link it into the executable.
-            set(SDL_SHARED OFF CACHE BOOL "" FORCE)
-            set(SDL_STATIC ON CACHE BOOL "" FORCE)
-        endif()
-        FetchContent_Declare(
-            SDL3
-            GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
-            GIT_TAG release-3.2.10
-            GIT_SHALLOW TRUE
+    add_executable(originalengine_app
+        src/main.cpp
+        src/engine/GpuDeviceProbe.cpp
+    )
+    target_link_libraries(originalengine_app PRIVATE originalengine)
+    target_compile_definitions(originalengine_app PRIVATE ORIGINALENGINE_USE_SDL3=1)
+
+    if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+        set_target_properties(originalengine_app PROPERTIES
+            MACOSX_BUNDLE TRUE
+            MACOSX_BUNDLE_GUI_IDENTIFIER "com.gasolineengine.demo"
+            MACOSX_BUNDLE_BUNDLE_NAME "Gasoline Engine"
+            XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "com.gasolineengine.demo"
+            XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED "NO"
         )
-        FetchContent_MakeAvailable(SDL3)
-        if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
-            target_link_libraries(originalengine PUBLIC SDL3::SDL3-static)
-        else()
-            target_link_libraries(originalengine PUBLIC SDL3::SDL3)
-        endif()
-
-        add_executable(originalengine_app
-            src/main.cpp
-            src/engine/GpuDeviceProbe.cpp
+        set_source_files_properties(
+            assets/demo.obj
+            assets/demo_texture.ppm
+            PROPERTIES MACOSX_PACKAGE_LOCATION "Resources/assets"
         )
-        target_link_libraries(originalengine_app PRIVATE originalengine)
-        target_compile_definitions(originalengine_app PRIVATE ORIGINALENGINE_USE_SDL3=1)
-
-        if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
-            set_target_properties(originalengine_app PROPERTIES
-                MACOSX_BUNDLE TRUE
-                MACOSX_BUNDLE_GUI_IDENTIFIER "com.gasolineengine.demo"
-                MACOSX_BUNDLE_BUNDLE_NAME "Gasoline Engine"
-                XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "com.gasolineengine.demo"
-                XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED "NO"
-            )
-            set_source_files_properties(
-                assets/demo.obj
-                assets/demo_texture.ppm
-                PROPERTIES MACOSX_PACKAGE_LOCATION "Resources/assets"
-            )
-            set_source_files_properties(
-                shaders/Metal/Basic3D.vert.metal
-                shaders/Metal/Basic3D.frag.metal
-                PROPERTIES MACOSX_PACKAGE_LOCATION "Resources/shaders"
-            )
-            target_sources(originalengine_app PRIVATE
-                assets/demo.obj
-                assets/demo_texture.ppm
-                shaders/Metal/Basic3D.vert.metal
-                shaders/Metal/Basic3D.frag.metal
-            )
-        else()
-            add_custom_command(TARGET originalengine_app POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_directory
-                    ${CMAKE_CURRENT_SOURCE_DIR}/assets
-                    $<TARGET_FILE_DIR:originalengine_app>/assets
-            )
-        endif()
-
-        if(WIN32)
-            add_custom_command(TARGET originalengine_app POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    $<TARGET_FILE:SDL3::SDL3>
-                    $<TARGET_FILE_DIR:originalengine_app>
-            )
-        endif()
+        set_source_files_properties(
+            shaders/Metal/Basic3D.vert.metal
+            shaders/Metal/Basic3D.frag.metal
+            PROPERTIES MACOSX_PACKAGE_LOCATION "Resources/shaders"
+        )
+        target_sources(originalengine_app PRIVATE
+            assets/demo.obj
+            assets/demo_texture.ppm
+            shaders/Metal/Basic3D.vert.metal
+            shaders/Metal/Basic3D.frag.metal
+        )
     else()
-        message(FATAL_ERROR "The sample app currently requires SDL3. Set ORIGINALENGINE_BUILD_APP=OFF to build the engine library only.")
+        add_custom_command(TARGET originalengine_app POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                ${CMAKE_CURRENT_SOURCE_DIR}/assets
+                $<TARGET_FILE_DIR:originalengine_app>/assets
+        )
+    endif()
+
+    if(WIN32)
+        add_custom_command(TARGET originalengine_app POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                $<TARGET_FILE:SDL3::SDL3>
+                $<TARGET_FILE_DIR:originalengine_app>
+        )
     endif()
 endif()
 
