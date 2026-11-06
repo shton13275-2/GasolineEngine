@@ -878,7 +878,7 @@ GPU shadow target format fallback — 2026-11-03
 
 ### Discord commit notifications — 2026-11-04
 
-- Updated `.github/workflows/build.yml` on `ios/initial-support`: this branch's Discord detailed build-report job runs only for push events whose ref is exactly `refs/heads/ios/initial-support`. It waits for the Windows and iOS jobs and reports both results even when either build fails. Other branches retain their own workflow definitions.
+- Updated `.github/workflows/build.yml` on `ios/initial-support`: the existing Discord detailed build-report job now runs for every `push` event, regardless of whether the iOS build succeeds. It still waits for the Windows and iOS jobs so the message can include their results.
 - Pull-request and manual workflow runs no longer trigger this Discord report.
 - The workflow uses the repository Actions secret `DISCORD_WEBHOOK_URL`. If that secret is absent, the notification step emits a warning and skips sending; no webhook URL is stored in the repository.
 - This change configures push-triggered notification; actual Discord delivery must be verified by a subsequent push with the secret configured.
@@ -898,8 +898,8 @@ GPU shadow target format fallback — 2026-11-03
 - Fixed the `ORIGINALENGINE_BUILD_APP=OFF` path. The engine library itself includes SDL3-dependent renderer/GPU sources, but SDL3 FetchContent and target linking were previously nested under the sample-app condition. SDL3 setup/linking now occurs whenever `ORIGINALENGINE_USE_SDL3=ON`; the app option controls only creation of `originalengine_app`.
 - `ORIGINALENGINE_USE_SDL3=OFF` now fails at CMake configure with an explicit message because the current engine library is not SDL-independent.
 - Added a Windows workflow configure/build check for the engine library with the sample app and CTest disabled. It reuses the SDL3 source fetched by the normal Windows configure.
-- Restricted Discord notifications to push events on `ios/initial-support`. The job still waits for both Windows and iOS jobs and reports their results even if either build fails; `main`, other branches, pull requests, and manual dispatch do not trigger the notification.
-- The matching Actions run must complete before these new build and notification checks are considered verified. No change is made to the `main` branch.
+- Restricted the notification job in the `ios/initial-support` workflow to push events whose ref is exactly `refs/heads/ios/initial-support`. Pull requests and manual dispatch do not trigger this branch's notification job. Other branches use their own workflow files; at review time `main` had no Discord job, while `docs/sync-to-main` had a separate `discord-notify` job with `if: always()`.
+- Verification: Actions runs #436 and #437 completed successfully, including Windows, iOS unsigned IPA, and Discord Notification jobs. The Windows engine-only build and CTest 12/12 passed in both runs. Run #438's Windows job also passed; its iOS job was still at Configure iOS Device when this note was written. No change was made to `main` or `docs/sync-to-main`.
 
 
 ## SSR diagnostic error visibility — 2026-11-06
