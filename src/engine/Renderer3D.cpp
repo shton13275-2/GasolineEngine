@@ -837,7 +837,7 @@ bool Renderer3D::render(int width, int height, double elapsedSeconds,
                     SDL_Color vertexColor = flatColor;
                     if (hasVertexNormals) {
                         const MeshVertex& source = *sourceVertices[corner];
-                        Vec3 normal{
+                        Vec3 vertexNormal{
                             std::abs(meshTransform.scale.x) > 1.0e-6F
                                 ? source.nx / meshTransform.scale.x : 0.0F,
                             std::abs(meshTransform.scale.y) > 1.0e-6F
@@ -845,23 +845,25 @@ bool Renderer3D::render(int width, int height, double elapsedSeconds,
                             std::abs(meshTransform.scale.z) > 1.0e-6F
                                 ? source.nz / meshTransform.scale.z : 0.0F
                         };
-                        normal = rotateX(normal, meshTransform.rotation.x);
-                        normal = rotateY(normal, meshTransform.rotation.y);
-                        normal = rotateZ(normal, meshTransform.rotation.z);
-                        normal = rotateY(normal, -camera.yaw());
-                        normal = rotateX(normal, camera.pitch());
-                        const float length = std::sqrt(
-                            normal.x * normal.x + normal.y * normal.y + normal.z * normal.z);
-                        if (length > 1.0e-6F) {
-                            normal.x /= length;
-                            normal.y /= length;
-                            normal.z /= length;
-                            constexpr Vec3 lightDirection{0.35F, 0.75F, -0.55F};
-                            constexpr float lightLength = 0.99624294F;
+                        vertexNormal = rotateX(vertexNormal, meshTransform.rotation.x);
+                        vertexNormal = rotateY(vertexNormal, meshTransform.rotation.y);
+                        vertexNormal = rotateZ(vertexNormal, meshTransform.rotation.z);
+                        vertexNormal = rotateY(vertexNormal, -camera.yaw());
+                        vertexNormal = rotateX(vertexNormal, camera.pitch());
+                        const float vertexNormalLength = std::sqrt(
+                            vertexNormal.x * vertexNormal.x +
+                            vertexNormal.y * vertexNormal.y +
+                            vertexNormal.z * vertexNormal.z);
+                        if (vertexNormalLength > 1.0e-6F) {
+                            vertexNormal.x /= vertexNormalLength;
+                            vertexNormal.y /= vertexNormalLength;
+                            vertexNormal.z /= vertexNormalLength;
+                            constexpr Vec3 vertexLightDirection{0.35F, 0.75F, -0.55F};
+                            constexpr float vertexLightLength = 0.99624294F;
                             const float vertexDiffuse = std::abs(
-                                normal.x * lightDirection.x +
-                                normal.y * lightDirection.y +
-                                normal.z * lightDirection.z) / lightLength;
+                                vertexNormal.x * vertexLightDirection.x +
+                                vertexNormal.y * vertexLightDirection.y +
+                                vertexNormal.z * vertexLightDirection.z) / vertexLightLength;
                             const float vertexIntensity =
                                 0.24F + 0.76F * std::clamp(vertexDiffuse, 0.0F, 1.0F);
                             vertexColor = {

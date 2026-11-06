@@ -197,8 +197,9 @@ GitHubには少なくとも次のブランチが存在する。
   - IPA integrity / bundle contents verify
   - artifact upload
 - 実際のworkflow runとjob結果は作業のたびにGitHub Actionsで確認する。古い成功runを最新変更の成功として扱わない。iOS jobのMSL compile stepは埋め込みshaderのsource compilationを検証するが、Metal runtime pipelineやiPhoneの見た目を検証するものではない。
-- Discord通知jobは `github.event_name == 'push'` かつ `github.ref == 'refs/heads/ios/initial-support'` の場合だけ実行する。`main`、他のブランチ、Pull Request、手動実行では送信しない。
-- Discord通知jobはWindowsとiOSの両jobに依存し、両方の完了後に実行する。`always()` 条件により、片方または両方のビルドが失敗した場合も各jobの結果を通知する。
+- `ios/initial-support` のworkflowにあるDiscord通知jobは `github.event_name == 'push'` かつ `github.ref == 'refs/heads/ios/initial-support'` の場合だけ実行する。Pull Requestと手動実行では送信しない。他ブランチの通知動作は各ブランチのworkflow定義に従う。
+- 同jobはWindowsとiOSの両jobに依存し、両方の完了後に実行する。`always()` 条件により、片方または両方のビルドが失敗した場合も各jobの結果を通知する。
+- 確認時点で `main` のworkflowにはDiscord通知jobがなく、`docs/sync-to-main` のworkflowには別の `discord-notify` job（`if: always()`）がある。ブランチ間でworkflow定義は独立しているため、通知動作を全ブランチ共通として記述しない。
 - Discord通知の詳細欄はWindows/iOSのjobだけを含め、Discord通知job自身は除外する。詳細文字列は1,000文字以下に制限し、Embedの各フィールド・説明・総文字数を送信前に検証する。DiscordへのHTTPエラー時はレスポンス本文をActionsログへ出す。Discord通知jobが失敗すると、Windows/iOSのビルドが成功していてもworkflow全体の結論はfailureになるため、個別jobの結果を分けて確認する。
 
 ## 6. ディレクトリと主要ファイル
@@ -877,7 +878,7 @@ GPU shadow target format fallback — 2026-11-03
 
 ### Discord commit notifications — 2026-11-04
 
-- Updated `.github/workflows/build.yml` on `ios/initial-support`: the existing Discord detailed build-report job now runs for every `push` event, regardless of whether the iOS build succeeds. It still waits for the Windows and iOS jobs so the message can include their results.
+- Updated `.github/workflows/build.yml` on `ios/initial-support`: this branch's Discord detailed build-report job runs only for push events whose ref is exactly `refs/heads/ios/initial-support`. It waits for the Windows and iOS jobs and reports both results even when either build fails. Other branches retain their own workflow definitions.
 - Pull-request and manual workflow runs no longer trigger this Discord report.
 - The workflow uses the repository Actions secret `DISCORD_WEBHOOK_URL`. If that secret is absent, the notification step emits a warning and skips sending; no webhook URL is stored in the repository.
 - This change configures push-triggered notification; actual Discord delivery must be verified by a subsequent push with the secret configured.
@@ -906,3 +907,10 @@ GPU shadow target format fallback — 2026-11-03
 - The renderer already stored asynchronous readback failures in `ssrDiagnosticsError_`, but no public accessor or main-loop consumer existed, so copy-pass and transfer-buffer mapping errors were not written to `ssr.log` when frame rendering continued.
 - Added `GpuRenderer::takeSsrDiagnosticsError()` to return and clear the pending message. The main loop writes each consumed message once as `gpu_diagnostics_error=...`.
 - This improves diagnostics only; it does not change the GPU readback, fence, shader, or reflection calculation. Runtime failure injection and physical-device validation remain outstanding.
+
+
+## MSVC shadow-warning cleanup and Application API review — 2026-11-06
+
+- Renamed the inner Gouraud-shading locals in `Renderer3D.cpp` (`normal`, `lightDirection`, and `lightLength`) to `vertexNormal`, `vertexLightDirection`, and `vertexLightLength`. This removes the three project-owned MSVC C4456 shadow warnings without changing the shading expressions.
+- Confirmed that `Application::run()` is declared in `include/engine/Application.hpp` but has no definition in the repository, and the current sample entry point does not call it. No behavior contract or call site defines what this method should do. Do not invent an event-loop implementation; define the API contract or remove the declaration in a deliberate API change before using it.
+- The SDL3 C5286 warnings seen in the Windows build originate in the fetched SDL3 dependency, not project source; they are left unchanged.

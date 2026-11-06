@@ -120,7 +120,7 @@ ctest --test-dir build -C Release --output-on-failure
 
 GitHub Actions can compile the Windows app and run automated tests, but it cannot show the interactive window inside the build log. You need a Windows device to run and visually inspect the executable.
 
-On `ios/initial-support`, the workflow sends a Discord build report after both build jobs finish, even if one or both fail. It does not run for `main`, other branches, pull requests, or manual dispatch. The report includes each build job's result, excludes the notification job itself, and keeps embed fields within Discord's message limits. A Discord delivery error can fail the overall workflow even when both build jobs succeed; inspect individual job results to distinguish build status from notification status.
+On `ios/initial-support`, this branch's workflow sends a Discord build report after both build jobs finish, even if one or both fail. The notification job is gated to push events for this exact branch; pull requests and manual dispatch do not run it. Other branches use their own workflow definitions. The report includes each build job's result, excludes the notification job itself, and keeps embed fields within Discord's message limits. A Discord delivery error can fail the overall workflow even when both build jobs succeed; inspect individual job results to distinguish build status from notification status.
 
 ## Project layout
 
@@ -244,7 +244,7 @@ ctest --test-dir build -C Release --output-on-failure
 3. ワークフローの実行が完了したら、成果物 `Gasoline Engine-Windows-x64` をダウンロードします。
 4. ZIP を展開し、対応する Windows PC で `originalengine_app.exe` を実行します。
 
-GitHub Actions は Windows アプリのビルドと自動テストを実行できますが、ビルドログ内に操作可能なゲームウィンドウを表示することはできません。実際の見た目を確認するには、Windows 端末で実行する必要があります。iOS 開発ブランチでは Windows / iOS の両ビルドが完了した後、成功・失敗の結果を Discord に通知します。この通知は `ios/initial-support` への push のみで実行され、`main` や手動実行、Pull Request では実行されません。
+GitHub Actions は Windows アプリのビルドと自動テストを実行できますが、ビルドログ内に操作可能なゲームウィンドウを表示することはできません。実際の見た目を確認するには、Windows 端末で実行する必要があります。`ios/initial-support` の workflow では Windows / iOS の両ビルドが完了した後、成功・失敗の結果を Discord に通知します。この通知jobは同ブランチへの push のみで実行され、Pull Request と手動実行では実行されません。他ブランチの通知動作は各ブランチの workflow 定義に従います。
 
 ## ディレクトリ構成
 
