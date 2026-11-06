@@ -855,6 +855,7 @@ GPU shadow target format fallback — 2026-11-03
 - Per-pixel channels encode: valid camera-depth sample, floor receiver mask, ray-march step count normalized to 64 steps, and ray-hit flag.
 - The renderer downloads the diagnostic texture to a SDL GPU download transfer buffer at most once per second. It submits that copy with SDL_SubmitGPUCommandBufferAndAcquireFence, polls the fence on later frames, and only maps/aggregates the transfer buffer after the fence signals. This avoids a synchronous per-frame readback.
 - ssr.log now receives aggregate depth_valid_pixels, reflective_pixels, ray_march_pixels, ray_march_steps, avg_ray_steps, and ray_hit_pixels records, in addition to the existing CPU-side state.
+- Runtime `SDL_BeginGPUCopyPass` and `SDL_MapGPUTransferBuffer` failures are stored by `GpuRenderer`, consumed once by the main loop, and appended to `ssr.log` as `gpu_diagnostics_error=...`. This diagnostic failure is separate from a rendered-frame failure.
 - This is an aggregate per-pixel diagnostic classification, not a fragment-stage atomic counter. The RGBA8 step channel is quantized. It does not prove that the hit color sampled is visually correct, and the physical iPhone result must still be inspected.
 - The diagnostic MRT/readback path and the updated embedded MSL require the matching Windows/iOS CI run and a new physical iPhone IPA test. Do not report the SSR artifact as fixed.
 
@@ -898,3 +899,10 @@ GPU shadow target format fallback — 2026-11-03
 - Added a Windows workflow configure/build check for the engine library with the sample app and CTest disabled. It reuses the SDL3 source fetched by the normal Windows configure.
 - Restricted Discord notifications to push events on `ios/initial-support`. The job still waits for both Windows and iOS jobs and reports their results even if either build fails; `main`, other branches, pull requests, and manual dispatch do not trigger the notification.
 - The matching Actions run must complete before these new build and notification checks are considered verified. No change is made to the `main` branch.
+
+
+## SSR diagnostic error visibility — 2026-11-06
+
+- The renderer already stored asynchronous readback failures in `ssrDiagnosticsError_`, but no public accessor or main-loop consumer existed, so copy-pass and transfer-buffer mapping errors were not written to `ssr.log` when frame rendering continued.
+- Added `GpuRenderer::takeSsrDiagnosticsError()` to return and clear the pending message. The main loop writes each consumed message once as `gpu_diagnostics_error=...`.
+- This improves diagnostics only; it does not change the GPU readback, fence, shader, or reflection calculation. Runtime failure injection and physical-device validation remain outstanding.

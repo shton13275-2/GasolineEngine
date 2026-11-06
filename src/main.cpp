@@ -599,6 +599,10 @@ int main(int argc, char* argv[]) {
                             camera, renderItems, !smokeTest, backendSwitchInput.hasMovementFinger,
                             backendSwitchInput.movementX, backendSwitchInput.movementY, smoothedFps,
                             wireframe, ssrEnabled, ssrDebugView);
+                        const std::string diagnosticsError = gpuRenderer->takeSsrDiagnosticsError();
+                        if (!diagnosticsError.empty()) {
+                            writeSsrDiagnostic("gpu_diagnostics_error=" + diagnosticsError);
+                        }
                         if (!rendered) {
                             gpuFailure = gpuRenderer->lastError();
                             writeSsrDiagnostic(std::string("frame_error=") + gpuFailure);

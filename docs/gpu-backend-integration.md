@@ -136,7 +136,7 @@ The first implementation recorded only CPU-visible state; that description is su
 - The CPU aggregates total pixels, valid-depth pixels, reflective receiver pixels, pixels that performed ray marching, reconstructed ray-step totals/average, and accepted hit pixels. These aggregate values are appended to ssr.log.
 - The overlay pipeline declares the same two render-pass attachments and masks writes to the diagnostics attachment.
 - This adds an extra full-resolution RGBA8 render target and periodic GPU-to-CPU transfer. It is asynchronous and not performed every frame, but its memory/bandwidth cost and Metal runtime compatibility still need physical-device verification. The 8-bit normalized step channel is quantized; these are classification counters derived from the per-pixel image, not GPU atomic counters.
-- If diagnostics texture creation/readback fails, the renderer records the diagnostic error where possible; the current texture-allocation path reports initialization/frame failure rather than silently pretending counters exist.
+- Diagnostic texture/transfer-buffer allocation failures cause initialization/frame failure. If a runtime readback map or copy-pass creation fails while rendering continues, the main loop consumes the stored error and appends it once to `ssr.log` as `gpu_diagnostics_error=...`; it is not reported as a successful diagnostic sample.
 - CI MSL compilation and IPA packaging do not establish the correctness of the readback or the SSR image on an iPhone.
 
 

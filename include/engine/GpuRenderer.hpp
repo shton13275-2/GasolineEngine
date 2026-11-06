@@ -51,6 +51,12 @@ public:
     [[nodiscard]] const SsrGpuDiagnostics& ssrGpuDiagnostics() const noexcept {
         return ssrGpuDiagnostics_;
     }
+    // Returns and clears the most recent asynchronous diagnostics readback error.
+    [[nodiscard]] std::string takeSsrDiagnosticsError() noexcept {
+        std::string error;
+        error.swap(ssrDiagnosticsError_);
+        return error;
+    }
 
 private:
     void setError(const char* operation);
