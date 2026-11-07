@@ -427,7 +427,6 @@ fragment BloomFragmentOutput bloom_fragment(
                     previousDepthDelta <= minHitThickness) {
                     float lowDistance = previousRayDistance;
                     float highDistance = distanceAlongRay;
-                    float2 refinedUV = sampleUV;
 
                     // Four binary steps reduce the 0.035-unit march interval
                     // to roughly 0.0022 world units without another full trace.
@@ -460,7 +459,6 @@ fragment BloomFragmentOutput bloom_fragment(
                                 length(middleSceneWorldPosition - constants.cameraPosition.xyz);
                             if (middleDelta > minHitThickness) {
                                 highDistance = middleDistance;
-                                refinedUV = middleUV;
                             } else {
                                 lowDistance = middleDistance;
                             }
