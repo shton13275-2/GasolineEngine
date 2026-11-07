@@ -388,10 +388,14 @@ fragment BloomFragmentOutput bloom_fragment(
         bool hasPreviousSample = false;
         float2 hitUV = float2(0.0);
         bool hitFound = false;
+        // Thickness is measured in world units, not nonlinear projected-depth units.
+        // The lower bound rejects precision noise; the upper bound rejects hits
+        // that are too far behind the visible surface.
+        const float minHitThickness = 0.002;
+        const float maxHitThickness = 0.08;
 
-        // Use a denser march so each floor pixel does not jump across
-        // thin projected parts of the cube. The previous 0.075 world-unit
-        // spacing produced visibly discontinuous, comb-like reflection bands.
+        // March in world space, then compare the ray point with the scene point
+        // reconstructed from the depth sample at the projected screen position.
         for (uint step = 1; step <= 64; ++step) {
             diagnosticRayMarchSteps = float(step);
             const float distanceAlongRay = 0.12 + 0.035 * float(step - 1);
@@ -408,47 +412,109 @@ fragment BloomFragmentOutput bloom_fragment(
                 ? dot(sceneDepthSample, float4(1.0, 1.0 / 255.0, 1.0 / 65025.0, 0.0))
                 : sceneDepthSample.r;
             if (sceneDepth < 0.999) {
-                const float depthDelta = projected.z - sceneDepth;
-                // Require a genuine front-to-back crossing. A single loose
-                // depth-thickness test caused nearby silhouettes to appear as
-                // stacked reflection layers directly below the source object.
-                if (hasPreviousSample && depthDelta > 0.0008 &&
-                    previousDepthDelta <= 0.0008 && depthDelta < 0.006) {
-                    // Refine the first crossing to reduce coarse-step false hits.
+                const float3 sceneWorldPosition =
+                    reconstructWorldPosition(sampleUV, sceneDepth, constants);
+                const float rayCameraDistance =
+                    length(samplePosition - constants.cameraPosition.xyz);
+                const float sceneCameraDistance =
+                    length(sceneWorldPosition - constants.cameraPosition.xyz);
+                const float depthDelta = rayCameraDistance - sceneCameraDistance;
+
+                // A hit must cross from in-front to behind the visible depth.
+                // Do not apply the maximum thickness until after refinement:
+                // a coarse step can land farther behind than the accepted band.
+                if (hasPreviousSample && depthDelta > minHitThickness &&
+                    previousDepthDelta <= minHitThickness) {
                     float lowDistance = previousRayDistance;
                     float highDistance = distanceAlongRay;
                     float2 refinedUV = sampleUV;
+
+                    // Four binary steps reduce the 0.035-unit march interval
+                    // to roughly 0.0022 world units without another full trace.
                     for (uint refine = 0; refine < 4; ++refine) {
                         const float middleDistance = (lowDistance + highDistance) * 0.5;
-                        const float3 middlePosition = rayOrigin + reflectedDirection * middleDistance;
-                        const float4 middleClip = constants.viewProjection * float4(middlePosition, 1.0);
+                        const float3 middlePosition =
+                            rayOrigin + reflectedDirection * middleDistance;
+                        const float4 middleClip =
+                            constants.viewProjection * float4(middlePosition, 1.0);
                         if (middleClip.w <= 0.001) break;
                         const float3 middleProjected = middleClip.xyz / middleClip.w;
                         const float2 middleUV = float2(
-                            middleProjected.x * 0.5 + 0.5, 0.5 - middleProjected.y * 0.5);
-                        if (any(middleUV <= float2(0.003)) || any(middleUV >= float2(0.997))) break;
-                        const float4 middleDepthSample = depthTexture.sample(depthSampler, middleUV);
+                            middleProjected.x * 0.5 + 0.5,
+                            0.5 - middleProjected.y * 0.5);
+                        if (any(middleUV <= float2(0.003)) ||
+                            any(middleUV >= float2(0.997))) break;
+
+                        const float4 middleDepthSample =
+                            depthTexture.sample(depthSampler, middleUV);
                         const float middleSceneDepth = constants.depthFlags.x > 0.5
-                            ? dot(middleDepthSample, float4(1.0, 1.0 / 255.0, 1.0 / 65025.0, 0.0))
+                            ? dot(middleDepthSample,
+                                float4(1.0, 1.0 / 255.0, 1.0 / 65025.0, 0.0))
                             : middleDepthSample.r;
-                        if (middleSceneDepth < 0.999 &&
-                            middleProjected.z > middleSceneDepth + 0.0008) {
-                            highDistance = middleDistance;
-                            refinedUV = middleUV;
+                        if (middleSceneDepth < 0.999) {
+                            const float3 middleSceneWorldPosition =
+                                reconstructWorldPosition(
+                                    middleUV, middleSceneDepth, constants);
+                            const float middleDelta =
+                                length(middlePosition - constants.cameraPosition.xyz) -
+                                length(middleSceneWorldPosition - constants.cameraPosition.xyz);
+                            if (middleDelta > minHitThickness) {
+                                highDistance = middleDistance;
+                                refinedUV = middleUV;
+                            } else {
+                                lowDistance = middleDistance;
+                            }
                         } else {
+                            // Background is in front of any geometry at this UV.
                             lowDistance = middleDistance;
                         }
                     }
-                    hitUV = refinedUV;
-                    hitDistance = distanceAlongRay;
-                    hitFound = true;
-                    break;
+
+                    // Re-evaluate the refined high endpoint and apply the
+                    // world-space thickness interval to the final candidate.
+                    const float3 refinedPosition =
+                        rayOrigin + reflectedDirection * highDistance;
+                    const float4 refinedClip =
+                        constants.viewProjection * float4(refinedPosition, 1.0);
+                    if (refinedClip.w > 0.001) {
+                        const float3 refinedProjected = refinedClip.xyz / refinedClip.w;
+                        const float2 candidateUV = float2(
+                            refinedProjected.x * 0.5 + 0.5,
+                            0.5 - refinedProjected.y * 0.5);
+                        if (all(candidateUV > float2(0.003)) &&
+                            all(candidateUV < float2(0.997))) {
+                            const float4 candidateDepthSample =
+                                depthTexture.sample(depthSampler, candidateUV);
+                            const float candidateDepth = constants.depthFlags.x > 0.5
+                                ? dot(candidateDepthSample,
+                                    float4(1.0, 1.0 / 255.0, 1.0 / 65025.0, 0.0))
+                                : candidateDepthSample.r;
+                            if (candidateDepth < 0.999) {
+                                const float3 candidateWorldPosition =
+                                    reconstructWorldPosition(
+                                        candidateUV, candidateDepth, constants);
+                                const float candidateDelta =
+                                    length(refinedPosition - constants.cameraPosition.xyz) -
+                                    length(candidateWorldPosition - constants.cameraPosition.xyz);
+                                if (candidateDelta > minHitThickness &&
+                                    candidateDelta <= maxHitThickness) {
+                                    hitUV = candidateUV;
+                                    hitDistance = highDistance;
+                                    hitFound = true;
+                                }
+                            }
+                        }
+                    }
+                    if (hitFound) break;
                 }
+
                 previousDepthDelta = depthDelta;
                 hasPreviousSample = true;
                 previousRayDistance = distanceAlongRay;
             } else {
-                previousDepthDelta = projected.z - 1.0;
+                // Keep the previous-sample sentinel in the same world-space
+                // distance-delta domain as valid depth samples.
+                previousDepthDelta = -1.0;
                 hasPreviousSample = true;
                 previousRayDistance = distanceAlongRay;
             }
