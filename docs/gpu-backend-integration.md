@@ -154,3 +154,13 @@ The first implementation recorded only CPU-visible state; that description is su
 - The ray-march block is now gated by surfaceMask > 0.001, so non-floor geometry no longer performs SSR traces or contributes to the hit diagnostics.
 - The debug modes are temporary diagnostic output paths, not a final renderer feature. Compare the raw-depth and receiver-mask views first; then inspect hit mask and hit UV if those are spatially coherent. The debug modes that depend on the receiver reconstruction should be tested with SSR enabled.
 - The new touch hit region and MSL runtime behavior still require CI and physical iPhone verification.
+
+## SSR world-space thickness and refined hit validation — 2026-11-07
+
+- Replaced fixed projected-depth crossing thresholds in the SSR ray marcher with a world-space separation test. At each projected ray sample, the shader reconstructs the scene point from the camera-depth texture and compares camera-to-ray-point distance with camera-to-scene-point distance.
+- The crossing condition is now a front-to-back transition across a 0.002 world-unit minimum separation. The existing four binary-refinement iterations narrow the 0.035 world-unit march interval to approximately 0.0022 world units along the ray.
+- After refinement, the high endpoint is projected and sampled again. The candidate is accepted only when its reconstructed scene separation is within the 0.002–0.08 world-unit interval. This maximum thickness rejects hits too far behind the visible depth surface.
+- The hit UV and hit distance now come from the same refined endpoint. Distance fade therefore uses the refined ray distance instead of the coarse march endpoint.
+- The background sentinel is explicitly -1.0 in the world-space delta domain; it no longer mixes projected NDC depth with world-distance deltas.
+- This corrects inconsistent units in the intersection test and a mismatch between refined UV and distance fade. The thresholds are initial values for the current demo scene and have not been visually tuned on the target device. Do not claim the comb-like SSR artifact is fixed until a new IPA is tested on an iPhone.
+- The Windows C++ tests do not execute this MSL fragment logic. The iOS Metal source compilation job can verify shader compilation, but runtime pipeline creation and reflection quality still require physical-device verification.
