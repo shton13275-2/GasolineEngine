@@ -914,3 +914,14 @@ GPU shadow target format fallback — 2026-11-03
 - Renamed the inner Gouraud-shading locals in `Renderer3D.cpp` (`normal`, `lightDirection`, and `lightLength`) to `vertexNormal`, `vertexLightDirection`, and `vertexLightLength`. This removes the three project-owned MSVC C4456 shadow warnings without changing the shading expressions.
 - Confirmed that `Application::run()` is declared in `include/engine/Application.hpp` but has no definition in the repository, and the current sample entry point does not call it. No behavior contract or call site defines what this method should do. Do not invent an event-loop implementation; define the API contract or remove the declaration in a deliberate API change before using it.
 - The SDL3 C5286 warnings seen in the Windows build originate in the fetched SDL3 dependency, not project source; they are left unchanged.
+
+
+## SSR world-space intersection and thickness update — 2026-11-07
+
+- Updated the embedded `bloom_fragment` SSR ray/depth intersection in `src/engine/GpuRenderer.cpp`. The previous implementation compared projected NDC depth deltas against fixed thresholds (`0.0008` / `0.006`), even though perspective-projected depth is nonlinear with camera distance.
+- The ray point and reconstructed scene point are now compared by their camera-to-point distances in world units. A front-to-back crossing is refined with the existing four binary-search iterations.
+- The final refined high endpoint is reprojected and depth-sampled again. A hit is accepted only when its world-space separation is greater than 0.002 and no greater than 0.08 world units. These are initial scene-scale thresholds, not a claim of visually optimal values; adjust only from new device evidence.
+- Corrected the hit-distance bookkeeping: distance fade now uses the refined ray distance associated with the final hit UV, rather than the original coarse march distance.
+- The no-geometry sentinel is now `-1.0` in the same world-distance-delta domain as valid samples. The old background path stored `projected.z - 1.0`, mixing projected-depth and world-distance units.
+- The four-step refinement and 64-step march remain; no duplicate binary-search stage was added. This source change is not yet confirmed to fix the repeated/combed reflection artifact. A matching iOS Metal compile/IPA run and physical iPhone comparison are required.
+- CI CTest does not exercise this embedded shader logic. Record Windows build, iOS MSL compilation/IPA packaging, and physical-device visual validation as separate results.
