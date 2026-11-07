@@ -9,6 +9,7 @@ For a complete, source-oriented handoff covering verified implementation status,
 ## Current status
 
 - CMake-based C++20 project
+- The public `Application::run()` declaration currently has no definition. The sample application does not use it; calling it from an external program fails at link time until its event-loop and lifecycle contract is defined.
 - SDL3 window and event loop
 - First-person camera with WASD movement and mouse-look
 - Axis-aligned collision world; axis-wise camera movement stops at the first obstacle boundary, preventing large steps from passing through an AABB while still allowing wall sliding
@@ -155,6 +156,7 @@ Gasoline Engine は、C++20 を基盤として開発しているクロスプラ�
 ## 現在の機能
 
 - CMake を使用した C++20 プロジェクト
+- 公開ヘッダーの `Application::run()` は現時点で宣言のみで実装がありません。サンプルアプリからは使用されておらず、外部から呼び出すとリンクエラーになります。イベントループとライフサイクルの仕様は未定義です。
 - SDL3 によるウィンドウ管理とイベントループ
 - WASD 移動とマウス視点操作に対応した一人称カメラ
 - 軸平行境界ボックス（AABB）による衝突判定。各軸の移動を最初の接触位置で止め、大きな移動量でも障害物をすり抜けず、壁沿いの移動も可能

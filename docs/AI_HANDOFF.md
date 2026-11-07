@@ -925,3 +925,12 @@ GPU shadow target format fallback — 2026-11-03
 - The no-geometry sentinel is now `-1.0` in the same world-distance-delta domain as valid samples. The old background path stored `projected.z - 1.0`, mixing projected-depth and world-distance units.
 - The four-step refinement and 64-step march remain; no duplicate binary-search stage was added. This source change is not yet confirmed to fix the repeated/combed reflection artifact. A matching iOS Metal compile/IPA run and physical iPhone comparison are required.
 - CI CTest does not exercise this embedded shader logic. Record Windows build, iOS MSL compilation/IPA packaging, and physical-device visual validation as separate results.
+
+
+## Application API recheck and standard header hygiene — 2026-11-07
+
+- Rechecked `include/engine/Application.hpp` and `src/engine/Application.cpp` at HEAD `6557f7eae6e1a88305c22acf700c4e1dc84e6ed7`. The public header declares `int Application::run()`, but the implementation still defines only the constructor. `CMakeLists.txt` includes `Application.cpp` in the `originalengine` library.
+- Confirmed that neither `src/main.cpp` nor any of the 12 current test source files references `Application`; the sample application owns a separate event loop.
+- Reproduced the link failure with GCC 14.2.0 using the current header/implementation and a minimal caller: the implementation object compiles, while the final link fails with `undefined reference to originalengine::Application::run()`.
+- Added the direct `<utility>` include to `Application.cpp` for its use of `std::move`, avoiding reliance on transitive standard-library includes. A standalone C++20 compile with `-Wall -Wextra -Wpedantic -Werror` passed after this include correction.
+- `Application::run()` remains intentionally unimplemented in this run. The repository does not define whether it owns SDL initialization/window creation, an event loop, rendering callbacks, shutdown, or error/return semantics. Implementing a blank or guessed loop would create undocumented public behavior; removing the declaration would be a public API break. Define that contract before making either change.
