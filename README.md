@@ -21,7 +21,7 @@ For a complete, source-oriented handoff covering verified implementation status,
 - Near-plane clipping for cube faces and loaded mesh triangles, preserving the visible portion of geometry that crosses the camera's near plane
 - Animated perspective-projected 3D cube with six face colors and all three rotation axes
 - Renders multiple visible scene objects from shared OBJ mesh data, applying each object's position, rotation, scale, and visibility flag
-- Experimental SDL_GPU backend renders indexed OBJ meshes with depth testing, P3 PPM texture sampling, metallic-roughness Cook-Torrance PBR, a directional shadow map, depth-neighborhood SSAO, experimental floor-only screen-space reflections with asynchronous per-pixel GPU diagnostics and touch-selectable debug views (depth, floor receiver mask, hit mask, hit UV), capability-gated HDR/ACES tone mapping, optional 4x MSAA, screen-space bloom, mipmap fallback, and a GPU touch/FPS overlay; physical-device Metal behavior and the current SSR image remain unverified
+- Experimental SDL_GPU backend renders indexed OBJ meshes with depth testing, P3 PPM texture sampling, metallic-roughness Cook-Torrance PBR, a directional shadow map, depth-neighborhood SSAO, experimental floor-only screen-space reflections with 64-step ray marching, four world-space binary-refinement steps, a 0.002–0.08 world-unit hit-thickness interval, and asynchronous per-pixel GPU diagnostics and touch-selectable debug views (depth, floor receiver mask, hit mask, hit UV), capability-gated HDR/ACES tone mapping, optional 4x MSAA, screen-space bloom, mipmap fallback, and a GPU touch/FPS overlay; physical-device Metal behavior and the current SSR image remain unverified
 - Press 1 or 2 to toggle the visibility of each demo pyramid at runtime
 - Press F3 to toggle wireframe rendering for the cube and loaded OBJ meshes in both CPU and GPU modes
 - Press F11 to toggle between windowed and fullscreen display
@@ -172,7 +172,7 @@ Gasoline Engine は、C++20 を基盤として開発しているクロスプラ�
 - 塗りつぶしポリゴンとフロアグリッド線に対応した CPU 側 Z バッファによるピクセル単位の奥行き判定
 - GitHub Actions による Windows 実行ファイルのビルド、12件の CTest（カメラ・衝突判定・シーン管理・共通シーン描画項目・OBJ ローダー・PPM 画像・ソフトウェアレンダラー・GPU ジオメトリ判定・GPU フレーム復旧・タッチボタンのヒット判定・バックエンド切替入力・プロシージャルメッシュ）、描画スモークテスト、および成果物のアップロード
 
-> CPU 側には透視投影、Z バッファ、透視補正付き UV テクスチャ描画、近接平面クリッピング、ワイヤーフレームに対応したソフトウェアレンダラーがあります。実験的な SDL_GPU レンダラーは、PBR、方向シャドウマップ、深度近傍 SSAO、床専用の実験的 SSR、対応時の HDR/ACES 合成、4x MSAA、9タップのブルーム、タッチオーバーレイを実装しています。深度形式の RGBA8 fallback では24-bit RGB packingを使用します。iOS CI は埋め込み MSL のコンパイルを検証しますが、iPhone 実機の Metal runtime と描画結果は未確認です。SSR は以前の実機テストでアーティファクトが確認されており、最新修正で解消したとはまだ確認できていません。
+> CPU 側には透視投影、Z バッファ、透視補正付き UV テクスチャ描画、近接平面クリッピング、ワイヤーフレームに対応したソフトウェアレンダラーがあります。実験的な SDL_GPU レンダラーは、PBR、方向シャドウマップ、深度近傍 SSAO、床専用の実験的 SSR（64ステップのレイマーチング、4回の二分探索、0.002〜0.08ワールド単位のThickness判定）、対応時の HDR/ACES 合成、4x MSAA、9タップのブルーム、タッチオーバーレイを実装しています。深度形式の RGBA8 fallback では24-bit RGB packingを使用します。iOS CI は埋め込み MSL のコンパイルを検証しますが、iPhone 実機の Metal runtime と描画結果は未確認です。SSR は以前の実機テストでアーティファクトが確認されており、今回の交差判定修正後も実機での再確認が必要です。
 
 ## カメラ操作
 
