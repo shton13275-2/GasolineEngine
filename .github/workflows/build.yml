@@ -16,7 +16,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Check out repository (exclude docs)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
         with:
           sparse-checkout: |
             CMakeLists.txt
@@ -55,7 +55,7 @@ jobs:
         run: ctest --test-dir build -C Release --output-on-failure
 
       - name: Upload Windows executable
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: GasolineEngine-Windows-x64
           path: |
@@ -71,7 +71,7 @@ jobs:
     runs-on: macos-15
     steps:
       - name: Check out repository (exclude docs)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
         with:
           sparse-checkout: |
             CMakeLists.txt
@@ -94,7 +94,7 @@ jobs:
           echo "version=$xcode_version" >> "$GITHUB_OUTPUT"
 
       - name: Cache SDL3 source
-        uses: actions/cache@v4
+        uses: actions/cache@v6.1.0
         with:
           path: build-ios/_deps/sdl3-src
           key: ios-sdl3-source-${{ runner.os }}-${{ steps.xcode-version.outputs.version }}-${{ hashFiles('CMakeLists.txt') }}
@@ -186,7 +186,7 @@ jobs:
           test "$bundle_id" = "com.gasolineengine.demo"
 
       - name: Upload unsigned IPA
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: GasolineEngine-iOS-unsigned-IPA
           path: ipa/GasolineEngine-iOS-unsigned.ipa

@@ -1568,8 +1568,11 @@ bool GpuRenderer::createDepthTexture(Uint32 width, Uint32 height) {
         if (SDL_WaitForGPUFences(device_, true, &pendingFence, 1)) {
             processSsrDiagnosticsReadback();
         } else {
-            SDL_ReleaseGPUFence(device_, ssrDiagnosticsFence_);
-            ssrDiagnosticsFence_ = nullptr;
+            const std::string waitError = SDL_GetError();
+            ssrDiagnosticsError_ =
+                "SDL_WaitForGPUFences(SSR diagnostics resize) failed: " + waitError;
+            lastError_ = ssrDiagnosticsError_;
+            return false;
         }
     }
     if (ssrDiagnosticsTexture_ != nullptr) {

@@ -127,6 +127,8 @@ The application creates `ssr.log` beside `startup.log` in the directory returned
 
 The first implementation recorded only CPU-visible state; that description is superseded by the SSR per-pixel GPU diagnostics section below. The current composite writes a second RGBA8 color target with depth validity in R, the floor receiver mask in G, ray-march steps normalized to 64 in B, and accepted hits in A. About once per second, the renderer downloads this target into a GPU download transfer buffer and maps it only after the associated fence signals. The CPU then appends aggregate depth-valid, reflective-receiver, ray-march-pixel, ray-march-step, average-step, and hit-pixel counts to `ssr.log`. These are image-derived classifications rather than fragment-stage atomic counters; the 8-bit step channel is quantized, and the counts do not validate the sampled hit color or visual reflection quality.
 
+If a swapchain resize requires replacing the diagnostic targets while a readback fence is pending, a failed `SDL_WaitForGPUFences` is now captured in the diagnostic/frame error state and aborts that GPU frame. The existing application recovery path then releases the GPU renderer and attempts CPU renderer recreation. This avoids silently discarding a failed fence wait and continuing target replacement. The SDL_GPU fence failure path has not been runtime-injected by the current tests.
+
 
 ## SSR per-pixel GPU diagnostics — 2026-11-04
 
