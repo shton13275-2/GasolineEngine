@@ -218,6 +218,7 @@ GitHubには少なくとも次のブランチが存在する。
 | `include/engine/GpuDeviceProbe.hpp` / `src/engine/GpuDeviceProbe.cpp` | SDL_GPU利用可否のProbe |
 | `include/engine/GpuFrameRecovery.hpp` | GPUフレーム失敗後のCPU復帰制御フロー |
 | `include/engine/GpuGeometryRules.hpp` | GPU三角形のUV有無判定ルール |
+| `include/engine/GpuRenderDiagnostics.hpp` | SSRログ用のGPU形式・MSAAラベル |
 | `include/engine/GpuRenderer.hpp` / `src/engine/GpuRenderer.cpp` | SDL_GPU indexed mesh、depth、PPM texture、point lighting、4x MSAA fallback、screen-space bloom、overlay |
 | `shaders/Metal/` | iOS向けMSL shader source（まだmain.cppのGPU previewからは未使用） |
 | `shaders/Source/` | HLSL shader source |
@@ -941,7 +942,7 @@ GPU shadow target format fallback — 2026-11-03
 - On the current source, `createDepthTexture()` waits for an outstanding `ssrDiagnosticsFence_` before replacing size-dependent diagnostic/depth targets. SDL 3.2.10 documents `SDL_WaitForGPUFences` as returning false on failure and requiring `SDL_GetError()`. The previous failure branch released the fence and continued without reporting the failed wait.
 - The resize path now captures the SDL error in both `ssrDiagnosticsError_` and `lastError_`, then returns false. `renderFrame()` submits the already-acquired swapchain command buffer and reports the GPU frame failure; the existing main-loop recovery releases the GPU renderer and attempts CPU renderer recreation. The pending diagnostic resources remain owned by the renderer until shutdown cleanup.
 - No SDL_GPU fence-wait failure-injection test exists in the current 13 CTest targets. The change requires the next Windows/iOS CI run; CI does not prove the physical-device failure path.
-- Actions run #445 on 2026-11-07 used `actions/checkout@v4`, `actions/cache@v4`, and `actions/upload-artifact@v4`, and emitted the Node.js 20 deprecation warning. Updated this branch's build workflow to `actions/checkout@v7.0.1`, `actions/cache@v6.1.0`, and `actions/upload-artifact@v7.0.2`; their action manifests declare Node.js 24. Run #445 used hosted runner version 2.338.2, above the cache v6 minimum 2.327.1. Verify the new versions in the next workflow run.
+- Actions run #445 on 2026-11-07 used `actions/checkout@v4`, `actions/cache@v4`, and `actions/upload-artifact@v4`, and emitted the Node.js 20 deprecation warning. This branch's workflow was updated to `actions/checkout@v7.0.1`, `actions/cache@v6.1.0`, and `actions/upload-artifact@v7.0.2`; their action manifests declare Node.js 24. Run #445 used hosted runner version 2.338.2, above the cache v6 minimum 2.327.1. Run #447 on 2026-11-09 executed all three updated actions on Windows and iOS without a Node.js 20 deprecation warning.
 - Run #445's Discord Notification job completed with success but its log explicitly reported that `DISCORD_WEBHOOK_URL` was not configured and delivery was skipped. A successful job conclusion therefore did not prove a Discord message was delivered. The README now records this distinction.
 
 
@@ -951,3 +952,14 @@ GPU shadow target format fallback — 2026-11-03
 - Added read-only `GpuRenderer` accessors and included these values in the existing once-per-second `ssr.log` frame record. No rendering, resource selection, shader math, or public rendering method behavior changes.
 - Added the `gpu_render_diagnostics` CTest to cover all supported labels and unknown-value fallbacks. The total CTest count is now 13.
 - This makes the device-selected depth path observable in a fresh iPhone log; it does not by itself diagnose or fix the known SSR visual artifact. Verify the matching Windows/iOS workflow and collect a new device log before drawing conclusions about the selected iPhone format.
+
+
+## SSR GPU format diagnostics verification — 2026-11-09
+
+- Commit `ec68ef96e283eced4853fe5390d3fe9715af65de` was verified by Actions run [#447](https://github.com/shton13275-2/GasolineEngine/actions/runs/42539901461), whose `head_sha` matched the commit.
+- Windows: Release build, engine-only build, one-frame smoke test, all 13 CTest targets, and Windows artifact upload succeeded. The new `gpu_render_diagnostics` test passed as test 13/13.
+- iOS Device: CMake configure, extraction of all 8 embedded MSL sources, Metal compilation/library link, Bundle Identifier check (`com.gasolineengine.demo`), unsigned app build, IPA packaging/integrity verification, and artifact upload succeeded.
+- Discord Notification completed successfully. `DISCORD_WEBHOOK_URL` was present as a masked secret, both build results were `success`, and the `curl --fail-with-body` step completed without an HTTP error. The workflow log does not expose the secret or message body.
+- Artifacts: Windows x64 ID `13640654515`; iOS unsigned IPA ID `13641535582` (776,022 bytes).
+- Windows still reports SDL Vulkan dependency warning C5286; iOS still reports deprecated UIKit/OpenGL ES APIs inside the fetched SDL3 source. These did not fail the run.
+- This CI run verifies compilation and packaging, not physical iPhone Metal runtime or the visual SSR result. A new device log is still required to learn which depth format the iPhone selects and whether the reflection artifacts changed.
