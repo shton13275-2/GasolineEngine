@@ -5,9 +5,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "engine/Camera.hpp"
+#include "engine/GpuRenderDiagnostics.hpp"
 #include "engine/Mesh.hpp"
 #include "engine/PpmImageLoader.hpp"
 #include "engine/Scene.hpp"
@@ -48,6 +50,18 @@ public:
 
     [[nodiscard]] const std::string& lastError() const noexcept { return lastError_; }
     [[nodiscard]] const std::string& driverName() const noexcept { return driverName_; }
+    [[nodiscard]] std::string_view ssrDepthColorFormatName() const noexcept {
+        return gpu_render_diagnostics::depthColorFormatName(shadowColorFormat_, shadowDepthPacked_);
+    }
+    [[nodiscard]] std::string_view depthStencilFormatName() const noexcept {
+        return gpu_render_diagnostics::depthStencilFormatName(depthFormat_);
+    }
+    [[nodiscard]] std::string_view sceneColorFormatName() const noexcept {
+        return gpu_render_diagnostics::sceneColorFormatName(sceneColorFormat_);
+    }
+    [[nodiscard]] std::string_view sampleCountName() const noexcept {
+        return gpu_render_diagnostics::sampleCountName(sampleCount_);
+    }
     [[nodiscard]] const SsrGpuDiagnostics& ssrGpuDiagnostics() const noexcept {
         return ssrGpuDiagnostics_;
     }

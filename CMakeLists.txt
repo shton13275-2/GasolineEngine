@@ -164,4 +164,8 @@ if(BUILD_TESTING)
     add_executable(originalengine_primitive_mesh_tests tests/primitive_mesh_tests.cpp)
     target_link_libraries(originalengine_primitive_mesh_tests PRIVATE originalengine)
     add_test(NAME primitive_meshes COMMAND originalengine_primitive_mesh_tests)
+
+    add_executable(originalengine_gpu_render_diagnostics_tests tests/gpu_render_diagnostics_tests.cpp)
+    target_link_libraries(originalengine_gpu_render_diagnostics_tests PRIVATE originalengine)
+    add_test(NAME gpu_render_diagnostics COMMAND originalengine_gpu_render_diagnostics_tests)
 endif()

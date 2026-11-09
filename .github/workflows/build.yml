@@ -51,7 +51,7 @@ jobs:
       - name: Smoke test (initialize SDL and render one frame)
         run: .\\build\\Release\\originalengine_app.exe --smoke-test
 
-      - name: Run CTest suite (12 tests)
+      - name: Run CTest suite (13 tests)
         run: ctest --test-dir build -C Release --output-on-failure
 
       - name: Upload Windows executable

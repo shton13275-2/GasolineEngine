@@ -631,7 +631,14 @@ int main(int argc, char* argv[]) {
                                     " camera=" + std::to_string(camera.x()) + "," +
                                     std::to_string(camera.y()) + "," +
                                     std::to_string(camera.z()) +
-                                    " driver=" + gpuRenderer->driverName());
+                                    " driver=" + gpuRenderer->driverName() +
+                                    " depth_color_format=" +
+                                    std::string(gpuRenderer->ssrDepthColorFormatName()) +
+                                    " depth_stencil_format=" +
+                                    std::string(gpuRenderer->depthStencilFormatName()) +
+                                    " scene_color_format=" +
+                                    std::string(gpuRenderer->sceneColorFormatName()) +
+                                    " msaa=" + std::string(gpuRenderer->sampleCountName()));
                             }
                         }
                         return rendered;

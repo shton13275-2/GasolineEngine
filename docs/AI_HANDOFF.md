@@ -223,7 +223,7 @@ GitHubには少なくとも次のブランチが存在する。
 | `shaders/Source/` | HLSL shader source |
 | `assets/demo.obj` | デモ用ピラミッド |
 | `assets/demo_texture.ppm` | デモ用テクスチャ |
-| `tests/` | 12 CTest targets: カメラ、衝突、シーン、shared scene render items、OBJ、PPM、Renderer、GPU復旧、GPUジオメトリ、タッチオーバーレイ、backend switch input、primitive meshes |
+| `tests/` | 13 CTest targets: カメラ、衝突、シーン、shared scene render items、OBJ、PPM、Renderer、GPU復旧、GPUジオメトリ、GPU render diagnostics labels、タッチオーバーレイ、backend switch input、primitive meshes |
 | `.github/workflows/build.yml` | Windows build/testとiOS unsigned IPA |
 
 ## 7. 操作方法
@@ -826,7 +826,7 @@ GPU shadow target format fallback — 2026-11-03
 - The iOS workflow compiles each extracted source with `xcrun -sdk iphoneos metal -c` and links the AIR outputs into a temporary `.metallib` before building the unsigned app. This is a CI source-compilation check; the runtime still creates SDL_GPU shaders from embedded MSL strings.
 - This check is intended to catch MSL syntax/type/compiler errors that the C++ compiler cannot see. It does not verify SDL_GPU pipeline creation, device-specific texture-format support, shader binding compatibility at runtime, or visual rendering on a physical iPhone.
 - Updated the current implementation summary to reflect Cook-Torrance PBR, directional shadow mapping, depth-neighborhood SSAO, experimental floor-only SSR, HDR/ACES compositing, and 24-bit packed depth fallback. The physical screenshot from the earlier IPA still showed repeated/combed SSR artifacts; the latest packed-depth change has not yet been verified on-device.
-- CMakeLists.txt currently registers 12 CTest targets, including `scene_render_items`; README and handoff counts now match the actual registrations.
+- CMakeLists.txt currently registers 13 CTest targets, including `scene_render_items` and `gpu_render_diagnostics`; README and handoff counts now match the actual registrations.
 
 
 ### GPU SSR manual toggle — 2026-11-04
@@ -889,7 +889,7 @@ GPU shadow target format fallback — 2026-11-03
 - Corrected stale SSR log descriptions in the README, AI handoff, and GPU integration notes. The current implementation uses an RGBA8 diagnostic target and asynchronous GPU-fence readback; the counts are image-derived classifications, not fragment-stage atomic counters.
 - Replaced literal backslash-n escape sequences that had been displayed in the README and AI handoff with actual Markdown line breaks.
 - Removed the unused local `lighting` value from the embedded mesh fragment shader. The returned lighting expression is unchanged; this addresses the unused-variable warning reported by the iOS Metal compiler in Actions run [#434](https://github.com/shton13275-2/GasolineEngine/actions/runs/41832461155).
-- Renamed the Windows workflow step to `Run CTest suite (12 tests)`; the CTest command and test selection are unchanged.
+- Renamed the Windows workflow step to `Run CTest suite (13 tests)`; the CTest command and test selection are unchanged.
 - These documentation and warning-cleanup changes require their own CI run. They do not claim a new physical-device SSR result.
 
 
@@ -940,6 +940,14 @@ GPU shadow target format fallback — 2026-11-03
 
 - On the current source, `createDepthTexture()` waits for an outstanding `ssrDiagnosticsFence_` before replacing size-dependent diagnostic/depth targets. SDL 3.2.10 documents `SDL_WaitForGPUFences` as returning false on failure and requiring `SDL_GetError()`. The previous failure branch released the fence and continued without reporting the failed wait.
 - The resize path now captures the SDL error in both `ssrDiagnosticsError_` and `lastError_`, then returns false. `renderFrame()` submits the already-acquired swapchain command buffer and reports the GPU frame failure; the existing main-loop recovery releases the GPU renderer and attempts CPU renderer recreation. The pending diagnostic resources remain owned by the renderer until shutdown cleanup.
-- No SDL_GPU fence-wait failure-injection test exists in the current 12 CTest targets. The change requires the next Windows/iOS CI run; CI does not prove the physical-device failure path.
+- No SDL_GPU fence-wait failure-injection test exists in the current 13 CTest targets. The change requires the next Windows/iOS CI run; CI does not prove the physical-device failure path.
 - Actions run #445 on 2026-11-07 used `actions/checkout@v4`, `actions/cache@v4`, and `actions/upload-artifact@v4`, and emitted the Node.js 20 deprecation warning. Updated this branch's build workflow to `actions/checkout@v7.0.1`, `actions/cache@v6.1.0`, and `actions/upload-artifact@v7.0.2`; their action manifests declare Node.js 24. Run #445 used hosted runner version 2.338.2, above the cache v6 minimum 2.327.1. Verify the new versions in the next workflow run.
 - Run #445's Discord Notification job completed with success but its log explicitly reported that `DISCORD_WEBHOOK_URL` was not configured and delivery was skipped. A successful job conclusion therefore did not prove a Discord message was delivered. The README now records this distinction.
+
+
+## SSR selected GPU format diagnostics — 2026-11-09
+
+- Added pure label helpers for the selected camera-depth color format/encoding, depth-stencil format, scene-color format, and MSAA sample count. The helpers report the actual SDL_GPU formats selected by initialization, including the RGBA8 packed-24-bit depth fallback.
+- Added read-only `GpuRenderer` accessors and included these values in the existing once-per-second `ssr.log` frame record. No rendering, resource selection, shader math, or public rendering method behavior changes.
+- Added the `gpu_render_diagnostics` CTest to cover all supported labels and unknown-value fallbacks. The total CTest count is now 13.
+- This makes the device-selected depth path observable in a fresh iPhone log; it does not by itself diagnose or fix the known SSR visual artifact. Verify the matching Windows/iOS workflow and collect a new device log before drawing conclusions about the selected iPhone format.

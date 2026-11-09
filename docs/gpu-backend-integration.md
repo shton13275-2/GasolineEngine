@@ -18,7 +18,7 @@ This document describes the implementation on `ios/initial-support`, not an unim
 - The texture path requests a full mip chain when the device reports support for the required RGBA8 sampler + color-target usage. Otherwise it retains a single-level texture.
 - The scene color target prefers sampleable `R16G16B16A16_FLOAT` when the device reports color-target and sampler support; otherwise it uses the swapchain format. The final composite applies ACES-fitted tone mapping. 4x MSAA is enabled only when the selected scene color and depth formats support it; the multisample target resolves into a single-sample intermediate, otherwise the scene uses a single-sample target.
 - A single-sample camera-depth prepass writes normalized depth into the same selected depth-color format. The fullscreen composite evaluates an eight-neighbor depth-neighborhood SSAO approximation and an experimental floor-only SSR ray march (64 samples, four binary-refinement iterations), then applies the existing 9-tap screen-space bloom and tone map. The touch/FPS overlay is drawn last with a single-sample pipeline. SSR remains limited by screen edges and disocclusions; an earlier physical-device screenshot showed repeated/combed reflection artifacts, and the latest depth-precision correction has not yet been checked on-device.
-- The depth prepass and directional shadow map prefer `R32_FLOAT`. When the renderer falls back to `R8G8B8A8_UNORM`, normalized depth is packed into RGB at 24-bit precision and decoded by the SSAO, SSR, and shadow-sampling paths. The fallback path is source-level and CI-compiled; the actual format selected by an iPhone GPU is not yet recorded.
+- The depth prepass and directional shadow map prefer `R32_FLOAT`. When the renderer falls back to `R8G8B8A8_UNORM`, normalized depth is packed into RGB at 24-bit precision and decoded by the SSAO, SSR, and shadow-sampling paths. The once-per-second `ssr.log` frame record now reports the selected depth-color format/encoding, depth-stencil format, scene-color format, and MSAA sample count; this identifies the selected format but does not validate its visual result.
 - Before texture allocation/upload, `RgbaImage::hasValidRgba8Data()` checks nonzero dimensions, exact tightly packed RGBA8 byte count, and the SDL_GPU transfer-buffer size limit.
 
 ## Backend switching and failure behavior
@@ -46,6 +46,7 @@ Keyboard input **G** requests a backend switch. The touch interface also has a t
 - GPU frame-failure CPU fallback uses `runGpuFrameWithCpuFallback` from `include/engine/GpuFrameRecovery.hpp`. `gpu_frame_recovery` tests GPU success, successful CPU fallback, fatal CPU fallback, and callback ordering. It does not inject an SDL_GPU failure or verify real SDL window-claim/resource transitions.
 - `backend_switch_input` tests clearing active touch state and suppressing held keyboard movement until release during backend transitions.
 - `primitive_meshes` tests the procedural cube's vertex/triangle structure, UVs, normals, and index bounds.
+- `gpu_render_diagnostics` tests the human-readable labels for selected depth-color encoding, depth-stencil format, scene-color format, and MSAA sample count, including unknown-value fallbacks.
 - MTL material parsing and per-material texture selection are not implemented.
 - GPU PNG/JPEG/BMP texture loading is not implemented; the GPU texture input currently comes from the P3 PPM loader.
 - GPU wireframe rendering is implemented with a separate `SDL_GPU_FILLMODE_LINE` pipeline and retains depth testing. A shared CPU/GPU renderer interface is not implemented.
@@ -166,3 +167,8 @@ If a swapchain resize requires replacing the diagnostic targets while a readback
 - The background sentinel is explicitly -1.0 in the world-space delta domain; it no longer mixes projected NDC depth with world-distance deltas.
 - This corrects inconsistent units in the intersection test and a mismatch between refined UV and distance fade. The thresholds are initial values for the current demo scene and have not been visually tuned on the target device. Do not claim the comb-like SSR artifact is fixed until a new IPA is tested on an iPhone.
 - The Windows C++ tests do not execute this MSL fragment logic. The iOS Metal source compilation job can verify shader compilation, but runtime pipeline creation and reflection quality still require physical-device verification.
+
+
+## GPU format information in SSR logs
+
+The once-per-second `frame` record in `ssr.log` includes `depth_color_format`, `depth_stencil_format`, `scene_color_format`, and `msaa`. The depth-color label distinguishes native `R32_FLOAT` from `R8G8B8A8_UNORM_PACKED24`; the latter means normalized depth is encoded into the RGB channels of the RGBA8 fallback. These fields report the formats selected by the renderer, not whether the resulting SSR image is visually correct.
