@@ -46,7 +46,7 @@ Keyboard input **G** requests a backend switch. The touch interface also has a t
 - GPU frame-failure CPU fallback uses `runGpuFrameWithCpuFallback` from `include/engine/GpuFrameRecovery.hpp`. `gpu_frame_recovery` tests GPU success, successful CPU fallback, fatal CPU fallback, and callback ordering. It does not inject an SDL_GPU failure or verify real SDL window-claim/resource transitions.
 - `backend_switch_input` tests clearing active touch state and suppressing held keyboard movement until release during backend transitions.
 - `primitive_meshes` tests the procedural cube's vertex/triangle structure, UVs, normals, and index bounds.
-- `gpu_render_diagnostics` tests the human-readable labels for selected depth-color encoding, depth-stencil format, scene-color format, and MSAA sample count, including unknown-value fallbacks.
+- `gpu_render_diagnostics` tests the human-readable labels for selected depth-color encoding, depth-stencil format, scene-color format (including `R10G10B10A2_UNORM`), and MSAA sample count, including unknown-value fallbacks.
 - MTL material parsing and per-material texture selection are not implemented.
 - GPU PNG/JPEG/BMP texture loading is not implemented; the GPU texture input currently comes from the P3 PPM loader.
 - GPU wireframe rendering is implemented with a separate `SDL_GPU_FILLMODE_LINE` pipeline and retains depth testing. A shared CPU/GPU renderer interface is not implemented.

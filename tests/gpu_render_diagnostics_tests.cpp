@@ -60,6 +60,10 @@ int main() {
         "R8G8B8A8_UNORM",
         "RGBA8 scene color label is incorrect.");
     allPassed &= expect(
+        sceneColorFormatName(SDL_GPU_TEXTUREFORMAT_R10G10B10A2_UNORM),
+        "R10G10B10A2_UNORM",
+        "10-bit packed scene color label is incorrect.");
+    allPassed &= expect(
         sceneColorFormatName(SDL_GPU_TEXTUREFORMAT_INVALID),
         "UNKNOWN",
         "Unknown scene color format must be identified.");
