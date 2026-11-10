@@ -60,6 +60,14 @@ int main() {
         "R8G8B8A8_UNORM",
         "RGBA8 scene color label is incorrect.");
     allPassed &= expect(
+        sceneColorFormatName(SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM_SRGB),
+        "R8G8B8A8_UNORM_SRGB",
+        "sRGB RGBA8 scene color label is incorrect.");
+    allPassed &= expect(
+        sceneColorFormatName(SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM_SRGB),
+        "B8G8R8A8_UNORM_SRGB",
+        "sRGB BGRA8 scene color label is incorrect.");
+    allPassed &= expect(
         sceneColorFormatName(SDL_GPU_TEXTUREFORMAT_R10G10B10A2_UNORM),
         "R10G10B10A2_UNORM",
         "10-bit packed scene color label is incorrect.");

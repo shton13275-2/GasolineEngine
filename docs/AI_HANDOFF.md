@@ -948,7 +948,7 @@ GPU shadow target format fallback — 2026-11-03
 
 ## SSR selected GPU format diagnostics — 2026-11-09
 
-- Added pure label helpers for the selected camera-depth color format/encoding, depth-stencil format, scene-color format, and MSAA sample count. The helpers report the actual SDL_GPU formats selected by initialization, including the RGBA8 packed-24-bit depth fallback.
+- Added pure label helpers for the selected camera-depth color format/encoding, depth-stencil format, scene-color format, and MSAA sample count. The helpers report the actual SDL_GPU formats selected by initialization, including the RGBA8 packed-24-bit depth fallback. Scene-color labels cover the SDL 3.2.10 swapchain SDR, SDR-linear sRGB, HDR-linear, and HDR10 formats.
 - Added read-only `GpuRenderer` accessors and included these values in the existing once-per-second `ssr.log` frame record. No rendering, resource selection, shader math, or public rendering method behavior changes.
 - Added the `gpu_render_diagnostics` CTest to cover all supported labels and unknown-value fallbacks. The total CTest count is now 13.
 - This makes the device-selected depth path observable in a fresh iPhone log; it does not by itself diagnose or fix the known SSR visual artifact. Verify the matching Windows/iOS workflow and collect a new device log before drawing conclusions about the selected iPhone format.

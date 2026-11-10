@@ -37,8 +37,12 @@ constexpr std::string_view sceneColorFormatName(
         return "R16G16B16A16_FLOAT";
     case SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM:
         return "R8G8B8A8_UNORM";
+    case SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM_SRGB:
+        return "R8G8B8A8_UNORM_SRGB";
     case SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM:
         return "B8G8R8A8_UNORM";
+    case SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM_SRGB:
+        return "B8G8R8A8_UNORM_SRGB";
     case SDL_GPU_TEXTUREFORMAT_R10G10B10A2_UNORM:
         return "R10G10B10A2_UNORM";
     default:
