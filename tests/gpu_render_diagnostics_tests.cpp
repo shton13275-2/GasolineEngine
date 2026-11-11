@@ -11,6 +11,14 @@ bool expect(std::string_view actual, std::string_view expected, const char* mess
     return false;
 }
 
+bool expectFormat(SDL_GPUTextureFormat actual, SDL_GPUTextureFormat expected,
+                  const char* message) {
+    if (actual == expected) return true;
+    std::cerr << message << " Expected format " << static_cast<int>(expected)
+              << ", got " << static_cast<int>(actual) << ".\n";
+    return false;
+}
+
 } // namespace
 
 int main() {
@@ -39,13 +47,61 @@ int main() {
         "D32_FLOAT",
         "D32 depth-stencil label is incorrect.");
     allPassed &= expect(
+        depthStencilFormatName(SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT),
+        "D32_FLOAT_S8_UINT",
+        "D32/S8 depth-stencil label is incorrect.");
+    allPassed &= expect(
+        depthStencilFormatName(SDL_GPU_TEXTUREFORMAT_D24_UNORM),
+        "D24_UNORM",
+        "D24 depth-only label is incorrect.");
+    allPassed &= expect(
         depthStencilFormatName(SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT),
         "D24_UNORM_S8_UINT",
         "D24/S8 depth-stencil label is incorrect.");
     allPassed &= expect(
+        depthStencilFormatName(SDL_GPU_TEXTUREFORMAT_D16_UNORM),
+        "D16_UNORM",
+        "D16 depth-only label is incorrect.");
+    allPassed &= expect(
         depthStencilFormatName(SDL_GPU_TEXTUREFORMAT_INVALID),
         "UNKNOWN",
         "Unknown depth-stencil format must be identified.");
+
+    allPassed &= expectFormat(
+        selectDepthStencilFormat([](SDL_GPUTextureFormat format) {
+            return format == SDL_GPU_TEXTUREFORMAT_D32_FLOAT ||
+                   format == SDL_GPU_TEXTUREFORMAT_D24_UNORM;
+        }),
+        SDL_GPU_TEXTUREFORMAT_D32_FLOAT,
+        "D32_FLOAT must remain the preferred depth format.");
+    allPassed &= expectFormat(
+        selectDepthStencilFormat([](SDL_GPUTextureFormat format) {
+            return format == SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT;
+        }),
+        SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT,
+        "D32_FLOAT_S8_UINT fallback was not selected.");
+    allPassed &= expectFormat(
+        selectDepthStencilFormat([](SDL_GPUTextureFormat format) {
+            return format == SDL_GPU_TEXTUREFORMAT_D24_UNORM;
+        }),
+        SDL_GPU_TEXTUREFORMAT_D24_UNORM,
+        "D24_UNORM fallback was not selected.");
+    allPassed &= expectFormat(
+        selectDepthStencilFormat([](SDL_GPUTextureFormat format) {
+            return format == SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT;
+        }),
+        SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT,
+        "D24_UNORM_S8_UINT fallback was not selected.");
+    allPassed &= expectFormat(
+        selectDepthStencilFormat([](SDL_GPUTextureFormat format) {
+            return format == SDL_GPU_TEXTUREFORMAT_D16_UNORM;
+        }),
+        SDL_GPU_TEXTUREFORMAT_D16_UNORM,
+        "D16_UNORM fallback was not selected.");
+    allPassed &= expectFormat(
+        selectDepthStencilFormat([](SDL_GPUTextureFormat) { return false; }),
+        SDL_GPU_TEXTUREFORMAT_INVALID,
+        "Unsupported depth formats must return INVALID.");
 
     allPassed &= expect(
         sceneColorFormatName(SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT),

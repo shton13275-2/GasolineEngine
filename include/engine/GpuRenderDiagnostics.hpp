@@ -18,13 +18,36 @@ constexpr std::string_view depthColorFormatName(
     }
 }
 
+template <typename IsSupported>
+SDL_GPUTextureFormat selectDepthStencilFormat(IsSupported isSupported) {
+    constexpr SDL_GPUTextureFormat candidates[]{
+        SDL_GPU_TEXTUREFORMAT_D32_FLOAT,
+        SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT,
+        SDL_GPU_TEXTUREFORMAT_D24_UNORM,
+        SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT,
+        SDL_GPU_TEXTUREFORMAT_D16_UNORM
+    };
+    for (const SDL_GPUTextureFormat format : candidates) {
+        if (isSupported(format)) {
+            return format;
+        }
+    }
+    return SDL_GPU_TEXTUREFORMAT_INVALID;
+}
+
 constexpr std::string_view depthStencilFormatName(
     SDL_GPUTextureFormat format) noexcept {
     switch (format) {
     case SDL_GPU_TEXTUREFORMAT_D32_FLOAT:
         return "D32_FLOAT";
+    case SDL_GPU_TEXTUREFORMAT_D32_FLOAT_S8_UINT:
+        return "D32_FLOAT_S8_UINT";
+    case SDL_GPU_TEXTUREFORMAT_D24_UNORM:
+        return "D24_UNORM";
     case SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT:
         return "D24_UNORM_S8_UINT";
+    case SDL_GPU_TEXTUREFORMAT_D16_UNORM:
+        return "D16_UNORM";
     default:
         return "UNKNOWN";
     }

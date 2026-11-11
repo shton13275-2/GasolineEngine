@@ -132,7 +132,7 @@ GitHubには少なくとも次のブランチが存在する。
 - SDL_GPU device、window claim、MSL shader、graphics pipeline、vertex/index buffer、depth texture、color texture、samplerの生成と解放をGpuRendererが管理する。
 - OBJ Meshのposition、normal、color、UVをGPU頂点形式へ変換し、SDL_GPU transfer buffer経由でアップロードする。
 - カメラのview/projectionと各SceneObjectのmodel transformを使い、複数オブジェクトをindexed drawする。
-- Depth-Stencil Attachmentを作成し、depth test/writeを有効化。画面サイズ変更時はdepth textureを再作成する。
+- Depth-Stencil Attachmentを作成し、depth test/writeを有効化。画面サイズ変更時はdepth textureを再作成する。深度形式は `D32_FLOAT`、`D32_FLOAT_S8_UINT`、`D24_UNORM`、`D24_UNORM_S8_UINT`、`D16_UNORM` の順に `SDL_GPUTextureSupportsFormat` で確認し、最初に対応する形式を選ぶ。
 - P3 ASCII PPMをRGBA8へ変換するPpmImageLoaderを追加。GPU側でSDL_GPUTextureへ転送し、fragment sampler slot 0へbindする。
 - OBJのUVはGPUへ渡し、画像の行方向に合わせてVを反転する。UVの有無は専用の頂点属性で管理し、負のUV値や0〜1範囲外の有効な座標を欠落扱いしない。UVがない頂点のみテクスチャなしfallbackにする。
 - OBJにvnがある場合はその法線を使用し、ない場合は三角形ごとのflat normalを生成する。
@@ -963,3 +963,13 @@ GPU shadow target format fallback — 2026-11-03
 - Artifacts: Windows x64 ID `13640654515`; iOS unsigned IPA ID `13641535582` (776,022 bytes).
 - Windows still reports SDL Vulkan dependency warning C5286; iOS still reports deprecated UIKit/OpenGL ES APIs inside the fetched SDL3 source. These did not fail the run.
 - This CI run verifies compilation and packaging, not physical iPhone Metal runtime or the visual SSR result. A new device log is still required to learn which depth format the iPhone selects and whether the reflection artifacts changed.
+
+
+## GPU depth attachment format fallback — 2026-11-11
+
+- SDL 3.2.10 documents `D16_UNORM` as universally supported for depth-stencil target usage, and guarantees at least one format from each of the `D24_UNORM` / `D32_FLOAT` and `D24_UNORM_S8_UINT` / `D32_FLOAT_S8_UINT` pairs.
+- The previous selection checked only `D32_FLOAT` and `D24_UNORM_S8_UINT`. A device exposing another documented fallback could therefore be rejected even though it had a usable depth format.
+- The selection now probes, in order, `D32_FLOAT`, `D32_FLOAT_S8_UINT`, `D24_UNORM`, `D24_UNORM_S8_UINT`, and `D16_UNORM`, using `SDL_GPUTextureSupportsFormat` with `SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET`. It returns `INVALID` only if none is reported supported.
+- `gpu_render_diagnostics` now tests each fallback, preferred-format priority, the no-supported-format result, and readable labels for all selected depth formats.
+- SDL 3.2.10's Metal source maps `D32_FLOAT_S8_UINT` to `MTLPixelFormatDepth32Float_Stencil8`; its iOS Metal support query rejects D24 formats and reports D16 support. The runtime format still depends on the device's actual support query.
+- This is a depth-attachment compatibility correction. It does not change camera-depth color encoding, SSR math, scene color, or the public renderer API. The `D16_UNORM` candidate is last because it has lower depth precision than the preceding candidates.

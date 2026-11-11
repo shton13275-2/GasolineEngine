@@ -11,7 +11,7 @@ This document describes the implementation on `ios/initial-support`, not an unim
 - UV presence is carried as a dedicated vertex attribute; negative and out-of-range OBJ UV values remain valid inputs to the repeat-addressed sampler.
 - A triangle is textured only if all three corners have UV coordinates. The production path uses the shared `gpu_detail::triangleHasCompleteTexCoords` rule in `include/engine/GpuGeometryRules.hpp`; otherwise all three vertices use the untextured vertex-color path. This keeps the varying constant across the primitive.
 - Per-object constants include model, MVP, inverse-transpose normal matrix, and camera position. OBJ vertex normals are used when valid; missing normals use generated flat face normals.
-- The mesh pass uses depth testing/writes and a depth-stencil texture. The depth texture is recreated when swapchain dimensions change.
+- The mesh pass uses depth testing/writes and a depth-stencil texture. The depth texture is recreated when swapchain dimensions change. Initialization probes `D32_FLOAT`, `D32_FLOAT_S8_UINT`, `D24_UNORM`, `D24_UNORM_S8_UINT`, then `D16_UNORM`, selecting the first format accepted by `SDL_GPUTextureSupportsFormat` for depth-stencil target usage.
 - The GPU fragment shader samples the P3 PPM-derived RGBA texture and applies metallic-roughness Cook-Torrance PBR (GGX normal distribution, Smith-Schlick geometry, and Schlick Fresnel) to directional and distance-attenuated point lighting from the emissive rotating cube. A 1024×1024 directional shadow map modulates directional lighting with a 3×3 PCF comparison.
 - A GPU overlay pass draws touch-control guides, movement knob, FPS text, and CPU backend switch control. It does not use the CPU `SDL_Renderer` while the window is claimed by SDL_GPU.
 - The backend-switch touch hit region is computed from the same shared pixel rectangle constants used by CPU and GPU overlay drawing (`touch_overlay::containsBackendButton`).
@@ -46,7 +46,7 @@ Keyboard input **G** requests a backend switch. The touch interface also has a t
 - GPU frame-failure CPU fallback uses `runGpuFrameWithCpuFallback` from `include/engine/GpuFrameRecovery.hpp`. `gpu_frame_recovery` tests GPU success, successful CPU fallback, fatal CPU fallback, and callback ordering. It does not inject an SDL_GPU failure or verify real SDL window-claim/resource transitions.
 - `backend_switch_input` tests clearing active touch state and suppressing held keyboard movement until release during backend transitions.
 - `primitive_meshes` tests the procedural cube's vertex/triangle structure, UVs, normals, and index bounds.
-- `gpu_render_diagnostics` tests the human-readable labels for selected depth-color encoding, depth-stencil format, scene-color format (including the SDR-linear sRGB formats and `R10G10B10A2_UNORM` HDR10 format), and MSAA sample count, including unknown-value fallbacks.
+- `gpu_render_diagnostics` tests the human-readable labels for selected depth-color encoding, all depth-attachment fallback formats, scene-color format (including the SDR-linear sRGB formats and `R10G10B10A2_UNORM` HDR10 format), and MSAA sample count. It also tests depth-format selection priority and the no-supported-format result.
 - MTL material parsing and per-material texture selection are not implemented.
 - GPU PNG/JPEG/BMP texture loading is not implemented; the GPU texture input currently comes from the P3 PPM loader.
 - GPU wireframe rendering is implemented with a separate `SDL_GPU_FILLMODE_LINE` pipeline and retains depth testing. A shared CPU/GPU renderer interface is not implemented.
@@ -172,3 +172,16 @@ If a swapchain resize requires replacing the diagnostic targets while a readback
 ## GPU format information in SSR logs
 
 The once-per-second `frame` record in `ssr.log` includes `depth_color_format`, `depth_stencil_format`, `scene_color_format`, and `msaa`. The depth-color label distinguishes native `R32_FLOAT` from `R8G8B8A8_UNORM_PACKED24`; the latter means normalized depth is encoded into the RGB channels of the RGBA8 fallback. These fields report the formats selected by the renderer, not whether the resulting SSR image is visually correct.
+
+
+## Depth attachment format selection
+
+The renderer probes these SDL 3.2.10 depth-stencil target formats in order and selects the first one reported by `SDL_GPUTextureSupportsFormat`:
+
+1. `D32_FLOAT`
+2. `D32_FLOAT_S8_UINT`
+3. `D24_UNORM`
+4. `D24_UNORM_S8_UINT`
+5. `D16_UNORM` (last-resort, lower precision)
+
+This covers the depth-only and depth/stencil alternatives documented by SDL. The selected value is exposed in the existing `depth_stencil_format` SSR log field. The unit test exercises the pure selection policy; it does not query a physical GPU or prove that a particular device selects a specific format.

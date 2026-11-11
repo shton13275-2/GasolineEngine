@@ -1088,13 +1088,13 @@ bool GpuRenderer::initialize(SDL_Window* window, const std::vector<const Mesh*>&
     const char* driver = SDL_GetGPUDeviceDriver(device_);
     driverName_ = driver != nullptr ? driver : "Unknown";
 
-    if (SDL_GPUTextureSupportsFormat(device_, SDL_GPU_TEXTUREFORMAT_D32_FLOAT,
-            SDL_GPU_TEXTURETYPE_2D, SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET)) {
-        depthFormat_ = SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
-    } else if (SDL_GPUTextureSupportsFormat(device_, SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT,
-            SDL_GPU_TEXTURETYPE_2D, SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET)) {
-        depthFormat_ = SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT;
-    } else {
+    depthFormat_ = gpu_render_diagnostics::selectDepthStencilFormat(
+        [this](SDL_GPUTextureFormat format) {
+            return SDL_GPUTextureSupportsFormat(
+                device_, format, SDL_GPU_TEXTURETYPE_2D,
+                SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET);
+        });
+    if (depthFormat_ == SDL_GPU_TEXTUREFORMAT_INVALID) {
         lastError_ = "GPU device does not support a usable depth-stencil texture format";
         shutdown();
         return false;
