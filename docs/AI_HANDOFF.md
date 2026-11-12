@@ -46,7 +46,7 @@ GasolineEngineは、C++20とSDL3を使ったクロスプラットフォーム3D�
 重要な現状認識:
 - CPUソフトウェアレンダラーは既に多くの機能を持つ。
 - GPU経路は試験的な段階だが、独立したGpuRendererでOBJメッシュ、複数SceneObject、深度テスト、タッチオーバーレイをSDL_GPU経由で描画する。
-- 現在のGPU経路はP3 PPMテクスチャ、Cook-Torrance metallic-roughness PBR（GGX / Smith-Schlick / Schlick Fresnel）、1024×1024方向シャドウマップ（3×3 PCF）、camera-depth prepassによるdepth-neighborhood SSAO、床専用の実験的SSR、対応時のR16G16B16A16_FLOAT HDR scene targetとACES fitted tone mapping、9-tap bloomを実装している。R32_FLOAT非対応時の深度fallbackは24-bit RGB packingを使う。iOS CIでは埋め込みMSLをMetal compilerでコンパイルするが、実機Metal pipeline/runtimeと描画結果は未確認。以前の実機スクリーンショットではSSR artifactが残っており、最新のdepth packing修正で解消したとはまだ確認できない。
+- 現在のGPU経路はP3 PPMテクスチャ、Cook-Torrance metallic-roughness PBR（GGX / Smith-Schlick / Schlick Fresnel）、1024×1024方向シャドウマップ（3×3 PCF）、camera-depth prepassによるdepth-neighborhood SSAO、床専用の実験的SSR、対応時のR16G16B16A16_FLOAT HDR scene targetとACES fitted tone mapping、9-tap bloomを実装している。R32_FLOAT非対応時の深度fallbackは24-bit RGB packingを使う。iOS CIでは埋め込みMSLをMetal compilerでコンパイルするが、現在のブランチHEADにおける実機Metal pipeline/runtimeと描画結果は未確認。2026-11-08の最新ユーザー報告では、改訂後のSSRは少し改善した一方、反射範囲が狭くなり、反射が消えやすくなった。テストしたIPAのcommit SHAは記録されていないため、現在のHEADの実機検証結果として扱わない。
 - 「GPU描画対応済み」「Metalシェーダーが実際にロードされる」といった表現は、コードと実機で確認できるまでは使わない。
 
 ## 2. ブランチ・作業対象の注意
@@ -926,6 +926,15 @@ GPU shadow target format fallback — 2026-11-03
 - The no-geometry sentinel is now `-1.0` in the same world-distance-delta domain as valid samples. The old background path stored `projected.z - 1.0`, mixing projected-depth and world-distance units.
 - The four-step refinement and 64-step march remain; no duplicate binary-search stage was added. This source change is not yet confirmed to fix the repeated/combed reflection artifact. A matching iOS Metal compile/IPA run and physical iPhone comparison are required.
 - CI CTest does not exercise this embedded shader logic. Record Windows build, iOS MSL compilation/IPA packaging, and physical-device visual validation as separate results.
+
+
+## Physical-device SSR follow-up — 2026-11-08
+
+- The user reported that a revised SSR attempt looked slightly better, but the visible reflection range became smaller and the reflection disappeared more easily. The reflection was not reported as completely absent.
+- The exact IPA commit SHA used for this observation was not recorded. Do not attribute this result to the current `ios/initial-support` HEAD (`b419314` at the 2026-11-12 repository review) or claim that the latest depth-format fallback was tested on-device.
+- No new root cause was established by this visual report. Do not change ray-march thresholds or step spacing based on this observation alone.
+- Next device comparison: record the tested IPA commit SHA; keep camera position and scene fixed; capture the `ssr.log` frame fields and aggregate counts; cycle DBG through raw depth, floor receiver mask, hit mask, and hit UV; compare SSR on/off. Correlate the screenshots and logs with the exact source commit before changing shader math.
+- CI MSL compilation and IPA packaging remain separate from physical-device runtime and visual verification.
 
 
 ## Application API recheck and standard header hygiene — 2026-11-07

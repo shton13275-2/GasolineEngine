@@ -22,7 +22,7 @@ For a complete, source-oriented handoff covering verified implementation status,
 - Near-plane clipping for cube faces and loaded mesh triangles, preserving the visible portion of geometry that crosses the camera's near plane
 - Animated perspective-projected 3D cube with six face colors and all three rotation axes
 - Renders multiple visible scene objects from shared OBJ mesh data, applying each object's position, rotation, scale, and visibility flag
-- Experimental SDL_GPU backend renders indexed OBJ meshes with depth testing, P3 PPM texture sampling, metallic-roughness Cook-Torrance PBR, a directional shadow map, depth-neighborhood SSAO, experimental floor-only screen-space reflections with 64-step ray marching, four world-space binary-refinement steps, a 0.002–0.08 world-unit hit-thickness interval, and asynchronous per-pixel GPU diagnostics and touch-selectable debug views (depth, floor receiver mask, hit mask, hit UV), capability-gated HDR/ACES tone mapping, optional 4x MSAA, screen-space bloom, mipmap fallback, and a GPU touch/FPS overlay; physical-device Metal behavior and the current SSR image remain unverified
+- Experimental SDL_GPU backend renders indexed OBJ meshes with depth testing, P3 PPM texture sampling, metallic-roughness Cook-Torrance PBR, a directional shadow map, depth-neighborhood SSAO, experimental floor-only screen-space reflections with 64-step ray marching, four world-space binary-refinement steps, a 0.002–0.08 world-unit hit-thickness interval, and asynchronous per-pixel GPU diagnostics and touch-selectable debug views (depth, floor receiver mask, hit mask, hit UV), capability-gated HDR/ACES tone mapping, optional 4x MSAA, screen-space bloom, mipmap fallback, and a GPU touch/FPS overlay; physical-device Metal behavior on the current branch HEAD remains unverified; the latest user-reported iPhone SSR test (2026-11-08) showed slight improvement but a smaller, more easily disappearing reflection. The tested IPA commit SHA was not recorded, so this result does not validate the current HEAD
 - Press 1 or 2 to toggle the visibility of each demo pyramid at runtime
 - Press F3 to toggle wireframe rendering for the cube and loaded OBJ meshes in both CPU and GPU modes
 - Press F11 to toggle between windowed and fullscreen display
@@ -100,6 +100,10 @@ The fullscreen composite writes a second RGBA8 diagnostic target. About once per
 
 The separate `--gpu-smoke-test` command only checks SDL_GPU device/window/swapchain submission; it does not exercise the indexed mesh renderer. It is not part of the current CI workflow.
 
+### Latest reported iPhone SSR observation (2026-11-08)
+
+The user reported that a revised SSR attempt looked slightly better, but the visible reflection range became smaller and the reflection disappeared more easily. The reflection was not reported as completely absent. The exact IPA commit SHA used for that test was not recorded, so this observation must not be attributed to the current `ios/initial-support` HEAD. Keep SSR unresolved and compare fresh logs/debug views from an IPA whose commit SHA is recorded.
+
 ## Build on Windows
 
 Run in a terminal with CMake and MSVC available:
@@ -174,7 +178,7 @@ Gasoline Engine は、C++20 を基盤として開発しているクロスプラ�
 - 塗りつぶしポリゴンとフロアグリッド線に対応した CPU 側 Z バッファによるピクセル単位の奥行き判定
 - GitHub Actions による Windows 実行ファイルのビルド、13件の CTest（カメラ・衝突判定・シーン管理・共通シーン描画項目・OBJ ローダー・PPM 画像・ソフトウェアレンダラー・GPU ジオメトリ判定・GPU 描画診断ラベル・GPU フレーム復旧・タッチボタンのヒット判定・バックエンド切替入力・プロシージャルメッシュ）、描画スモークテスト、および成果物のアップロード
 
-> CPU 側には透視投影、Z バッファ、透視補正付き UV テクスチャ描画、近接平面クリッピング、ワイヤーフレームに対応したソフトウェアレンダラーがあります。実験的な SDL_GPU レンダラーは、PBR、方向シャドウマップ、深度近傍 SSAO、床専用の実験的 SSR（64ステップのレイマーチング、4回の二分探索、0.002〜0.08ワールド単位のThickness判定）、対応時の HDR/ACES 合成、4x MSAA、9タップのブルーム、タッチオーバーレイを実装しています。深度形式の RGBA8 fallback では24-bit RGB packingを使用します。深度アタッチメントは `D32_FLOAT`、`D32_FLOAT_S8_UINT`、`D24_UNORM`、`D24_UNORM_S8_UINT`、最後に `D16_UNORM` の順で対応形式を確認し、最初に対応している形式を選択します。iOS CI は埋め込み MSL のコンパイルを検証しますが、iPhone 実機の Metal runtime と描画結果は未確認です。SSR は以前の実機テストでアーティファクトが確認されており、今回の交差判定修正後も実機での再確認が必要です。
+> CPU 側には透視投影、Z バッファ、透視補正付き UV テクスチャ描画、近接平面クリッピング、ワイヤーフレームに対応したソフトウェアレンダラーがあります。実験的な SDL_GPU レンダラーは、PBR、方向シャドウマップ、深度近傍 SSAO、床専用の実験的 SSR（64ステップのレイマーチング、4回の二分探索、0.002〜0.08ワールド単位のThickness判定）、対応時の HDR/ACES 合成、4x MSAA、9タップのブルーム、タッチオーバーレイを実装しています。深度形式の RGBA8 fallback では24-bit RGB packingを使用します。深度アタッチメントは `D32_FLOAT`、`D32_FLOAT_S8_UINT`、`D24_UNORM`、`D24_UNORM_S8_UINT`、最後に `D16_UNORM` の順で対応形式を確認し、最初に対応している形式を選択します。iOS CI は埋め込み MSL のコンパイルを検証しますが、現在のブランチHEADにおける iPhone 実機の Metal runtime と描画結果は未確認です。2026-11-08 の最新ユーザー報告では、SSR は少し改善した一方、反射範囲が狭くなり、反射が消えやすくなりました。テストした IPA の commit SHA は記録されていないため、この結果を現在のHEADの検証結果として扱いません。
 
 ## カメラ操作
 
@@ -227,6 +231,10 @@ CPU/GPUの描画対象は `SceneRenderItem` の共通リストで管理します
 GPU メッシュ描画では UV の有無を UV 数値とは別に管理するため、負の値や 0〜1 の範囲外にある有効な OBJ UV 座標も、テクスチャの repeat アドレス指定でサンプリングされます。1つの三角形で3頂点すべてにUVがある場合だけテクスチャを使用し、UVの有無が混在する三角形は全体を頂点カラーで描画して、フラグメント間のUV有無フラグ補間を避けます。GPUへのRGBA8テクスチャ入力は、幅×高さ×4バイトとの完全一致とSDL_GPU転送サイズ上限を検証します。GPU 経路は MSL シェーダーを要求し、Metal 対応デバイスを主な対象としています。Windows での GPU 実行と iPhone 実機での Metal 描画は未確認です。CPU ソフトウェアレンダラーは別経路として維持されています。MTL マテリアル、複数マテリアル / テクスチャ、PNG / JPEG の GPU テクスチャ読み込み、CPU / GPU 共通 Renderer API は未実装です。GPU ワイヤーフレームは F3 キーで切り替えられます。
 
 別途用意されている `--gpu-smoke-test` は SDL_GPU デバイス・ウィンドウ・スワップチェーンの基本的な送信経路を確認するだけで、OBJ メッシュレンダラーの検証ではありません。現在の CI ワークフローには含まれていません。
+
+### 最新のiPhone実機SSR報告（2026-11-08）
+
+ユーザーから、改訂後のSSRは少し改善した一方で、見える反射範囲が狭くなり、反射が消えやすくなったとの報告があった。反射が完全に消えたという報告ではない。テストしたIPAのcommit SHAは記録されていないため、この結果を現在の `ios/initial-support` のHEADに対する実機検証として扱わない。SSRは未解決のままとし、commit SHAを記録したIPAから新しいログとデバッグビューを取得して比較する。
 
 ## Windows でビルドする
 
