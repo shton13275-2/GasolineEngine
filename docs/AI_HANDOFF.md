@@ -931,7 +931,7 @@ GPU shadow target format fallback — 2026-11-03
 ## Physical-device SSR follow-up — 2026-11-08
 
 - The user reported that a revised SSR attempt looked slightly better, but the visible reflection range became smaller and the reflection disappeared more easily. The reflection was not reported as completely absent.
-- The exact IPA commit SHA used for this observation was not recorded. Do not attribute this result to the current `ios/initial-support` HEAD (`b419314` at the 2026-11-12 repository review) or claim that the latest depth-format fallback was tested on-device.
+- The exact IPA commit SHA used for this observation was not recorded. Do not attribute this result to any specific `ios/initial-support` HEAD or claim that the latest depth-format fallback was tested on-device.
 - No new root cause was established by this visual report. Do not change ray-march thresholds or step spacing based on this observation alone.
 - Next device comparison: record the tested IPA commit SHA; keep camera position and scene fixed; capture the `ssr.log` frame fields and aggregate counts; cycle DBG through raw depth, floor receiver mask, hit mask, and hit UV; compare SSR on/off. Correlate the screenshots and logs with the exact source commit before changing shader math.
 - CI MSL compilation and IPA packaging remain separate from physical-device runtime and visual verification.
@@ -982,3 +982,11 @@ GPU shadow target format fallback — 2026-11-03
 - `gpu_render_diagnostics` now tests each fallback, preferred-format priority, the no-supported-format result, and readable labels for all selected depth formats.
 - SDL 3.2.10's Metal source maps `D32_FLOAT_S8_UINT` to `MTLPixelFormatDepth32Float_Stencil8`; its iOS Metal support query rejects D24 formats and reports D16 support. The runtime format still depends on the device's actual support query.
 - This is a depth-attachment compatibility correction. It does not change camera-depth color encoding, SSR math, scene color, or the public renderer API. The `D16_UNORM` candidate is last because it has lower depth precision than the preceding candidates.
+
+
+## Repository and CI recheck — 2026-11-13
+
+- At this review, `ios/initial-support` points to `57964e1065bb12b7c3ed815bd2dc3d53de24b43a`; `main` remains at `bb9fea26b26b7c7732ab5379bbdffb7d2df7296f`. GitHub's compare endpoint reports the development branch 301 commits ahead and 9 behind `main`. The open issue and pull-request lists are empty.
+- GitHub Actions run [#452](https://github.com/shton13275-2/GasolineEngine/actions/runs/43133767402) has a `head_sha` matching the branch HEAD and completed with overall `success`. The Windows job completed Release build, engine-only build, one-frame smoke test, and CTest (13/13). The iOS job completed iOS Device configuration, extraction and compilation of all 8 embedded MSL sources with temporary Metal-library linking, unsigned app build, IPA packaging, and archive verification. The Discord Notification job also concluded `success`; this is the workflow job result, not an independent confirmation of how the message appeared in a Discord client.
+- Rechecked `Application.hpp`, `Application.cpp`, `src/main.cpp`, and all 13 test sources. The public header still declares `int Application::run()`, while the implementation defines only the constructor; no reference to `Application` or `Application::run()` was found in the sample entry point or test sources. Reproduced the external-caller link failure with GCC 14.2.0 using the current header and implementation: compiling `Application.cpp` succeeded, but linking a minimal caller failed with `undefined reference to originalengine::Application::run()`. This remains unresolved because the repository does not define the method's SDL initialization, window ownership, event-loop, renderer, shutdown, return-value, or error-handling contract. Do not add a placeholder implementation or remove the public declaration without an explicit API decision.
+- No physical iPhone test was performed for this review. The successful MSL source compilation and IPA packaging in CI do not verify Metal runtime pipeline creation or the SSR image on a device.
