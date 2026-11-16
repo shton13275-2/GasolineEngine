@@ -39,3 +39,12 @@ This repository uses a deterministic, no-LLM nightly verification workflow. It d
 - Workflow on `main`: https://github.com/shton13275-2/GasolineEngine/blob/main/.github/workflows/nightly-verification.yml
 - GitHub Actions runner pricing: https://docs.github.com/en/actions/how-tos/write-workflows/choose-where-workflows-run/choose-the-runner-for-a-job
 - Scheduled workflow behavior: https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule
+
+
+## Observed scheduled-run failure — 2026-11-16
+
+- Scheduled Nightly verification runs [#13](https://github.com/shton13275-2/GasolineEngine/actions/runs/43527643526), [#14](https://github.com/shton13275-2/GasolineEngine/actions/runs/43647712486), and [#15](https://github.com/shton13275-2/GasolineEngine/actions/runs/43771220392) all concluded `failure`.
+- In all three runs, Configure, Build, Smoke test, and Run unit tests succeeded; CTest reported 13/13 passed. Only the final `Write audit summary` step failed.
+- Run #15's generated PowerShell script failed to parse at line 5 with `You must provide a value expression following the '-' operator.` The workflow writes Markdown inline-code backticks inside double-quoted PowerShell strings. PowerShell uses backtick as its escape character, so the summary script is syntactically invalid. The engine build and tests passed, but the workflow as a whole did not.
+- The scheduled workflow definition is stored on `main`, the repository default branch, because GitHub scheduled events use the default-branch workflow file. This development run is restricted to `ios/initial-support` and does not modify `main`; therefore the defect is recorded here but not repaired. A change made only to a workflow copy on `ios/initial-support` would not fix scheduled runs.
+- When a separate change to `main` is authorized, compute the source commit in a PowerShell variable and use single-quoted strings for static Markdown lines (or otherwise avoid unescaped Markdown backticks), then run a manual dispatch and confirm the audit summary completes.
