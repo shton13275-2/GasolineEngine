@@ -48,3 +48,10 @@ This repository uses a deterministic, no-LLM nightly verification workflow. It d
 - Run #15's generated PowerShell script failed to parse at line 5 with `You must provide a value expression following the '-' operator.` The workflow writes Markdown inline-code backticks inside double-quoted PowerShell strings. PowerShell uses backtick as its escape character, so the summary script is syntactically invalid. The engine build and tests passed, but the workflow as a whole did not.
 - The scheduled workflow definition is stored on `main`, the repository default branch, because GitHub scheduled events use the default-branch workflow file. This development run is restricted to `ios/initial-support` and does not modify `main`; therefore the defect is recorded here but not repaired. A change made only to a workflow copy on `ios/initial-support` would not fix scheduled runs.
 - When a separate change to `main` is authorized, compute the source commit in a PowerShell variable and use single-quoted strings for static Markdown lines (or otherwise avoid unescaped Markdown backticks), then run a manual dispatch and confirm the audit summary completes.
+
+
+## Status recheck — 2026-11-17
+
+- The latest main-branch workflow-run listing returned Nightly verification run [#15](https://github.com/shton13275-2/GasolineEngine/actions/runs/43771220392) as the newest Nightly run; no later Nightly run was present in that returned list.
+- Run #15 remains `failure`. Its job steps show Configure, Build, Smoke test, and Run unit tests succeeded, CTest reported 13/13 passed, and only `Write audit summary` failed. The generated PowerShell script reports a parser error at line 5: `You must provide a value expression following the '-' operator.`
+- The workflow remains on the repository default branch `main`. This development review did not modify `main`; a fix confined to `ios/initial-support` would not change the scheduled workflow definition.
